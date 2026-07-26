@@ -251,7 +251,8 @@ export default function SavedReportScreen() {
               variant="secondary"
             />
             <ThemedText themeColor="textSecondary" style={styles.actionsNote}>
-              Le PDF est reconstruit à chaque fois : tu peux le réenregistrer autant que nécessaire.
+              Le PDF enregistré s&apos;efface de tes fichiers au bout d&apos;une semaine. Le rapport,
+              lui, reste ici : tu peux le réenregistrer à tout moment.
             </ThemedText>
           </SectionCard>
 

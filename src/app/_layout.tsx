@@ -6,14 +6,16 @@ import { useColorScheme } from 'react-native';
 
 import { APP_SHORT_NAME } from '@/constants/company';
 import { Colors } from '@/constants/theme';
-import { purgeGeneratedPdfs } from '@/lib/pdf-cache';
+import { purgeGeneratedPdfs, purgeSavedPdfs } from '@/lib/pdf-cache';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
 
-  // Clear PDFs left in the cache by earlier sessions.
+  // Clear the temporary PDFs left in the cache, and the ones written into the
+  // user's folder that have outlived their use.
   React.useEffect(() => {
     purgeGeneratedPdfs();
+    purgeSavedPdfs();
   }, []);
   const palette = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const baseTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;

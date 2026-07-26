@@ -46,6 +46,19 @@ export async function setSetting(key: string, value: string | null) {
   localStorage.setItem(storageKey, value);
 }
 
+// The Storage Access Framework is Android-only, so nothing is ever recorded here.
+export async function recordSavedPdf(_uri: string) {
+  return;
+}
+
+export async function listSavedPdfsWrittenBefore(_isoDate: string) {
+  return [] as string[];
+}
+
+export async function forgetSavedPdf(_uri: string) {
+  return;
+}
+
 export async function saveReportDraft(report: ReportDraft) {
   const drafts = readWebDrafts().filter((item) => item.id !== report.id);
   writeWebDrafts([report, ...drafts]);

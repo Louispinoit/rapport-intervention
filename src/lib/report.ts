@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 
 import { COMPANY_NAME } from '@/constants/company';
 import { purgeGeneratedPdfs } from '@/lib/pdf-cache';
-import { getSetting, setSetting } from '@/lib/report-store';
+import { getSetting, recordSavedPdf, setSetting } from '@/lib/report-store';
 
 export const serviceOptions = [
   'Ramonage',
@@ -383,6 +383,7 @@ async function writePdf(directoryUri: string, name: string, base64: string) {
     'application/pdf'
   );
   await StorageAccessFramework.writeAsStringAsync(fileUri, base64, { encoding: 'base64' });
+  await recordSavedPdf(fileUri);
 }
 
 /**

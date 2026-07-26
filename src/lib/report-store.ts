@@ -63,6 +63,10 @@ export async function initReportStore() {
           key TEXT PRIMARY KEY NOT NULL,
           value TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS saved_pdfs (
+          uri TEXT PRIMARY KEY NOT NULL,
+          written_at TEXT NOT NULL
+        );
       `);
     })();
   }
@@ -91,6 +95,40 @@ export async function setSetting(key: string, value: string | null) {
   }
 
   await db.runAsync('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', key, value);
+}
+
+/**
+ * Every PDF the app writes into the user's own folder is recorded here, so the
+ * cleanup can only ever remove files this app created — never something the user
+ * put in that folder himself.
+ */
+export async function recordSavedPdf(uri: string) {
+  await initReportStore();
+  const db = await databasePromise;
+
+  await db.runAsync(
+    'INSERT OR REPLACE INTO saved_pdfs (uri, written_at) VALUES (?, ?)',
+    uri,
+    new Date().toISOString()
+  );
+}
+
+export async function listSavedPdfsWrittenBefore(isoDate: string) {
+  await initReportStore();
+  const db = await databasePromise;
+  const rows = await db.getAllAsync<{ uri: string }>(
+    'SELECT uri FROM saved_pdfs WHERE written_at < ?',
+    isoDate
+  );
+
+  return rows.map((row) => row.uri);
+}
+
+export async function forgetSavedPdf(uri: string) {
+  await initReportStore();
+  const db = await databasePromise;
+
+  await db.runAsync('DELETE FROM saved_pdfs WHERE uri = ?', uri);
 }
 
 export async function saveReportDraft(report: ReportDraft) {
