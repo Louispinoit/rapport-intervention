@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Path } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -18,7 +19,13 @@ import { PrimaryButton } from '@/components/ui/primary-button';
 import { SectionCard } from '@/components/ui/section-card';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { chooseSaveDirectory, saveReportPdf, type ReportDraft } from '@/lib/report';
+import {
+  chooseSaveDirectory,
+  customerFullName,
+  saveReportPdf,
+  SIGNATURE_BOX,
+  type ReportDraft,
+} from '@/lib/report';
 import { loadReportDraft } from '@/lib/report-store';
 
 /** Abby's web app, which unlike its native app can attach a file to an invoice. */
@@ -207,6 +214,9 @@ export default function SavedReportScreen() {
               </ThemedText>
             </View>
             <ThemedText style={[styles.headerTitle, isCompact && styles.headerTitleCompact]}>
+              {customerFullName(report) || 'Client non renseigné'}
+            </ThemedText>
+            <ThemedText themeColor="textSecondary" style={styles.headerDate}>
               Intervention du {report.interventionDate || 'jour non renseigné'}
             </ThemedText>
           </SectionCard>
@@ -235,6 +245,34 @@ export default function SavedReportScreen() {
               style={styles.observations}>
               {report.observations || 'Aucune observation complémentaire'}
             </ThemedText>
+          </SectionCard>
+
+          <SectionCard>
+            <SectionHeader number="05" title="Signature" compact={isCompact} />
+            {report.signature.length ? (
+              <View style={[styles.signatureBox, { borderColor: theme.backgroundSelected }]}>
+                <Svg
+                  height="100%"
+                  viewBox={`0 0 ${SIGNATURE_BOX.width} ${SIGNATURE_BOX.height}`}
+                  width="100%">
+                  {report.signature.map((stroke, index) => (
+                    <Path
+                      d={stroke}
+                      key={index}
+                      stroke={theme.text}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={3}
+                      fill="none"
+                    />
+                  ))}
+                </Svg>
+              </View>
+            ) : (
+              <ThemedText themeColor="textSecondary" style={styles.emptyLine}>
+                Non signé
+              </ThemedText>
+            )}
           </SectionCard>
 
           <SectionCard style={styles.actionsCard}>
@@ -344,6 +382,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     lineHeight: 30,
     fontWeight: '700',
+  },
+  headerDate: {
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  signatureBox: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.md,
+    height: 140,
   },
   headerTitleCompact: {
     fontSize: 20,

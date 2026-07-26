@@ -15,6 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { CheckRow } from '@/components/ui/check-row';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { SectionCard } from '@/components/ui/section-card';
+import { SignaturePad } from '@/components/ui/signature-pad';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -172,8 +173,51 @@ export default function NewReportScreen() {
           contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}
           keyboardShouldPersistTaps="handled">
 
-          {/* The date is the only thing identifying a report — the client is on the invoice. */}
           <SectionCard>
+            <View style={styles.group}>
+              <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+                Nom du client
+              </ThemedText>
+              <TextInput
+                autoCapitalize="words"
+                onChangeText={(value) => updateField('customerLastName', value)}
+                placeholder="Dupont"
+                placeholderTextColor={theme.textSecondary}
+                selectionColor={theme.accent}
+                style={[
+                  styles.textField,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.backgroundSelected,
+                    color: theme.text,
+                  },
+                ]}
+                value={report.customerLastName}
+              />
+            </View>
+
+            <View style={styles.group}>
+              <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>
+                Prénom du client
+              </ThemedText>
+              <TextInput
+                autoCapitalize="words"
+                onChangeText={(value) => updateField('customerFirstName', value)}
+                placeholder="Jean"
+                placeholderTextColor={theme.textSecondary}
+                selectionColor={theme.accent}
+                style={[
+                  styles.textField,
+                  {
+                    backgroundColor: theme.background,
+                    borderColor: theme.backgroundSelected,
+                    color: theme.text,
+                  },
+                ]}
+                value={report.customerFirstName}
+              />
+            </View>
+
             <View style={styles.group}>
               <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>
                 Date de l&apos;intervention
@@ -269,6 +313,15 @@ export default function NewReportScreen() {
             />
           </SectionCard>
 
+          {/* Section 05 - Signature */}
+          <SectionCard>
+            <SectionHeader number="05" title="Signature" compact={isCompact} />
+            <SignaturePad
+              onChange={(strokes) => updateField('signature', strokes)}
+              strokes={report.signature}
+            />
+          </SectionCard>
+
           {/* Actions */}
           <SectionCard style={styles.actionsCard}>
             <ThemedText themeColor="textSecondary" style={styles.actionsNote}>
@@ -353,6 +406,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+  },
+  textField: {
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    minHeight: 54,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+    fontSize: 17,
+    lineHeight: 24,
   },
   dateInput: {
     borderRadius: Radius.md,

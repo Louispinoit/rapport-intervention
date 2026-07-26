@@ -162,11 +162,19 @@ export async function listReportDrafts() {
     `
   );
 
-  return rows.map((row) => ({
-    id: row.id,
-    interventionDate: row.intervention_date,
-    updatedAt: row.updated_at,
-  }));
+  // Summaries come from the stored JSON rather than from columns, so adding a
+  // field to the list never means migrating the schema again.
+  return rows.map((row) => {
+    const report = JSON.parse(row.data) as Partial<ReportDraft>;
+
+    return {
+      id: row.id,
+      interventionDate: row.intervention_date,
+      customerLastName: report.customerLastName ?? '',
+      customerFirstName: report.customerFirstName ?? '',
+      updatedAt: row.updated_at,
+    };
+  });
 }
 
 export async function loadReportDraft(id: string) {

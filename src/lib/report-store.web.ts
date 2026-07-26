@@ -23,6 +23,8 @@ function summarize(report: ReportDraft): ReportSummary {
   return {
     id: report.id,
     interventionDate: report.interventionDate,
+    customerLastName: report.customerLastName,
+    customerFirstName: report.customerFirstName,
     updatedAt: report.updatedAt,
   };
 }

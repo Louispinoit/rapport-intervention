@@ -62,28 +62,42 @@ export const woodBestPracticeItems = [
   'Éviter la mise au ralenti excessive, notamment la nuit.',
 ] as const;
 
-/**
- * No client identity here on purpose: the report always travels with the Abby
- * invoice, which carries the customer. The date is what identifies it.
- */
 export type ReportDraft = {
   id: string;
   createdAt: string;
   updatedAt: string;
   interventionDate: string;
+  customerLastName: string;
+  customerFirstName: string;
   services: string[];
   sootTypes: string[];
   sootVolume: string;
   visibleDefects: string[];
   advice: string[];
   observations: string;
+  /** SVG path commands, one per stroke, in the SIGNATURE_BOX coordinate space. */
+  signature: string[];
 };
 
 export type ReportSummary = {
   id: string;
   interventionDate: string;
+  customerLastName: string;
+  customerFirstName: string;
   updatedAt: string;
 };
+
+/** The coordinate space signature strokes are captured and replayed in. */
+export const SIGNATURE_BOX = { width: 600, height: 200 } as const;
+
+export function customerFullName(report: {
+  customerFirstName: string;
+  customerLastName: string;
+}) {
+  return [report.customerFirstName.trim(), report.customerLastName.trim()]
+    .filter(Boolean)
+    .join(' ');
+}
 
 function todayAsFrenchDate() {
   return new Intl.DateTimeFormat('fr-FR').format(new Date());
@@ -124,12 +138,15 @@ export function createEmptyReport(): ReportDraft {
     createdAt: timestamp,
     updatedAt: timestamp,
     interventionDate: todayAsFrenchDate(),
+    customerLastName: '',
+    customerFirstName: '',
     services: [],
     sootTypes: [],
     sootVolume: '',
     visibleDefects: [],
     advice: [],
     observations: '',
+    signature: [],
   };
 }
 
@@ -203,6 +220,22 @@ export function buildReportHtml(report: ReportDraft) {
   ].join('');
 
   const titleBar = '<div style="background:' + RED + ';color:white;font-size:13px;font-weight:900;text-transform:uppercase;letter-spacing:2px;text-align:center;padding:8px;margin-bottom:12px;">Rapport d&#39;interventions</div>';
+
+  function identityCell(label: string, value: string) {
+    return '<td style="width:50%;vertical-align:top;padding-right:10px;">' +
+      '<div style="font-size:7px;font-weight:700;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.9px;">' + label + '</div>' +
+      '<div style="font-size:11px;font-weight:700;padding-top:2px;">' + (value ? escapeHtml(value) : '&mdash;') + '</div>' +
+      '</td>';
+  }
+
+  const identity = [
+    '<table style="table-layout:fixed;border-collapse:collapse;width:100%;margin-bottom:14px;">',
+    '<tr>',
+    identityCell('Client', customerFullName(report)),
+    identityCell('Date de l&#39;intervention', report.interventionDate),
+    '</tr>',
+    '</table>',
+  ].join('');
 
   const legalBox = [
     '<div style="border:1.5px solid ' + RED + ';margin-bottom:14px;overflow:hidden;">',
@@ -289,6 +322,36 @@ export function buildReportHtml(report: ReportDraft) {
     '</p>',
   ].join('');
 
+  // Strokes are replayed as SVG, so the signature stays crisp at print resolution
+  // instead of being a rasterised image scaled to the page.
+  const signaturePaths = report.signature
+    .map((stroke) => '<path d="' + escapeHtml(stroke) + '" fill="none" stroke="' + TEXT + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>')
+    .join('');
+  const signatureBox = report.signature.length
+    ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + SIGNATURE_BOX.width + ' ' + SIGNATURE_BOX.height + '" style="width:100%;height:58px;">' + signaturePaths + '</svg>'
+    : '<div style="height:58px;"></div>';
+
+  const signature = [
+    '<table style="table-layout:fixed;border-collapse:collapse;width:100%;margin-top:14px;">',
+    '<tr>',
+    '<td style="width:52%;vertical-align:bottom;padding-right:14px;">',
+    inlineLabel('Signature du client'),
+    signatureBox,
+    '<div style="border-top:0.5px solid ' + MUTED + ';padding-top:3px;font-size:7.5px;color:' + MUTED + ';">',
+    report.signature.length
+      ? escapeHtml(customerFullName(report) || 'Client')
+      : 'Non sign&eacute;',
+    '</div>',
+    '</td>',
+    '<td style="width:48%;vertical-align:bottom;">',
+    inlineLabel('Le technicien'),
+    '<div style="height:58px;"></div>',
+    '<div style="border-top:0.5px solid ' + MUTED + ';padding-top:3px;font-size:7.5px;color:' + MUTED + ';">Ramonage Marc Gomes Sud Vend&eacute;e</div>',
+    '</td>',
+    '</tr>',
+    '</table>',
+  ].join('');
+
   const footer = '<div style="margin-top:12px;padding-top:5px;border-top:0.5px solid #D4D4D4;text-align:center;font-size:7.5px;color:#AAA;">Ramonage Marc Gomes Sud Vend&eacute;e &middot; 42 rue des Orch&icirc;d&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77</div>';
 
   // Android's print WebView ignores `@page { margin }`, which pushes the content
@@ -312,7 +375,8 @@ export function buildReportHtml(report: ReportDraft) {
     ' .page { width: ' + pageWidth + '; padding: 12mm; }' +
     ' table { border-collapse: collapse; width: 100%; } h1, h2, h3, p { margin: 0; }' +
     '</style></head><body><div class="page">' +
-    header + titleBar + legalBox + prestation + rapport + row2 + observations + footer +
+    header + titleBar + identity + legalBox + prestation + rapport + row2 + observations +
+    signature + footer +
     '</div></body></html>';
 }
 
@@ -332,8 +396,9 @@ export function reportFileName(report: ReportDraft) {
         String(date.getDate()).padStart(2, '0'),
       ].join('-')
     : 'sans-date';
+  const customer = customerFullName(report).replace(/[\\/:*?"<>|]+/g, '-').trim();
 
-  return `rapport-${stamp}.pdf`;
+  return customer ? `rapport-${stamp}-${customer}.pdf` : `rapport-${stamp}.pdf`;
 }
 
 export async function exportReportPdf(report: ReportDraft) {

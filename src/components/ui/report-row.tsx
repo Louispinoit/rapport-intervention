@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import type { ReportSummary } from '@/lib/report';
+import { customerFullName, type ReportSummary } from '@/lib/report';
 
 type ReportRowProps = {
   report: ReportSummary;
@@ -22,8 +22,10 @@ function formatUpdatedAt(value: string) {
 export function ReportRow({ report, onPress, showDivider = true }: ReportRowProps) {
   const theme = useTheme();
   const savedAt = formatUpdatedAt(report.updatedAt);
-  const title = `Intervention du ${report.interventionDate || savedAt}`;
-  const details = report.interventionDate === savedAt ? '' : `Enregistré le ${savedAt}`;
+  const customer = customerFullName(report);
+  const date = report.interventionDate || savedAt;
+  const title = customer || `Intervention du ${date}`;
+  const details = customer ? `Intervention du ${date}` : '';
 
   return (
     <Pressable
