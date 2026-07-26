@@ -72,6 +72,10 @@ export async function listReportDrafts() {
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
+export async function deleteReportDraft(id: string) {
+  writeWebDrafts(readWebDrafts().filter((item) => item.id !== id));
+}
+
 export async function loadReportDraft(id: string) {
   return readWebDrafts().find((item) => item.id === id) ?? null;
 }

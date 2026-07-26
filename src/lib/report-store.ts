@@ -177,6 +177,13 @@ export async function listReportDrafts() {
   });
 }
 
+export async function deleteReportDraft(id: string) {
+  await initReportStore();
+  const db = await databasePromise;
+
+  await db.runAsync('DELETE FROM reports WHERE id = ?', id);
+}
+
 export async function loadReportDraft(id: string) {
   await initReportStore();
   const db = await databasePromise;

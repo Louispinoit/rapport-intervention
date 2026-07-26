@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,7 +20,7 @@ import { SectionCard } from '@/components/ui/section-card';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { reportDate, type ReportSummary } from '@/lib/report';
-import { listReportDrafts } from '@/lib/report-store';
+import { deleteReportDraft, listReportDrafts } from '@/lib/report-store';
 
 const monthFormatter = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
 
@@ -117,6 +118,19 @@ export default function HistoryScreen() {
     };
   }, [isFocused]);
 
+  async function removeReport(id: string) {
+    // Drop it from the list first so the row disappears under the finger.
+    setReports((current) => current.filter((report) => report.id !== id));
+
+    try {
+      await deleteReportDraft(id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur inconnue';
+      Alert.alert('Suppression impossible', message);
+      setReports(await listReportDrafts());
+    }
+  }
+
   const sortedReports = useMemo(
     () => [...reports].sort((a, b) => reportDate(b).getTime() - reportDate(a).getTime()),
     [reports]
@@ -203,6 +217,7 @@ export default function HistoryScreen() {
                       {group.reports.map((report, index) => (
                         <ReportRow
                           key={report.id}
+                          onDelete={() => removeReport(report.id)}
                           onPress={() =>
                             router.push({ pathname: '/report/[id]', params: { id: report.id } })
                           }
