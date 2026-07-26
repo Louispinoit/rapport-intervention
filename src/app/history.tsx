@@ -1,6 +1,6 @@
 import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -14,31 +14,69 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { ReportRow } from '@/components/ui/report-row';
 import { SectionCard } from '@/components/ui/section-card';
-import { COMPANY_NAME } from '@/constants/company';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { reportDate, type ReportSummary } from '@/lib/report';
 import { listReportDrafts } from '@/lib/report-store';
-import type { ReportSummary } from '@/lib/report';
 
-function formatDate(value: string) {
-  if (!value) {
-    return 'Date non renseignée';
+const monthFormatter = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
+
+type MonthGroup = {
+  key: string;
+  label: string;
+  reports: ReportSummary[];
+};
+
+function groupByMonth(reports: ReportSummary[]): MonthGroup[] {
+  const groups = new Map<string, MonthGroup>();
+
+  for (const report of reports) {
+    const date = reportDate(report);
+    const key = `${date.getFullYear()}-${date.getMonth()}`;
+    const group = groups.get(key);
+
+    if (group) {
+      group.reports.push(report);
+    } else {
+      groups.set(key, { key, label: monthFormatter.format(date), reports: [report] });
+    }
   }
 
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat('fr-FR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(parsed);
+  return [...groups.values()];
 }
 
-function getReportTitle() {
-  return 'Rapport d’intervention';
+function FilterChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.chip,
+        {
+          backgroundColor: selected ? theme.accent : theme.backgroundElement,
+          borderColor: selected ? theme.accent : theme.backgroundSelected,
+          opacity: pressed ? 0.72 : 1,
+        },
+      ]}>
+      <ThemedText
+        style={[styles.chipLabel, { color: selected ? theme.accentForeground : theme.text }]}>
+        {label}
+      </ThemedText>
+    </Pressable>
+  );
 }
 
 export default function HistoryScreen() {
@@ -48,6 +86,7 @@ export default function HistoryScreen() {
   const theme = useTheme();
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const isCompact = width < 430;
   const horizontalPadding = isCompact ? Spacing.three : Spacing.four;
 
@@ -59,7 +98,6 @@ export default function HistoryScreen() {
     let cancelled = false;
 
     const loadReports = async () => {
-      setLoading(true);
       try {
         const nextReports = await listReportDrafts();
         if (!cancelled) {
@@ -79,67 +117,104 @@ export default function HistoryScreen() {
     };
   }, [isFocused]);
 
+  const sortedReports = useMemo(
+    () => [...reports].sort((a, b) => reportDate(b).getTime() - reportDate(a).getTime()),
+    [reports]
+  );
+
+  const years = useMemo(() => {
+    const found = new Set(sortedReports.map((report) => reportDate(report).getFullYear()));
+
+    return [...found].sort((a, b) => b - a);
+  }, [sortedReports]);
+
+  const visibleReports = useMemo(
+    () =>
+      selectedYear === null
+        ? sortedReports
+        : sortedReports.filter((report) => reportDate(report).getFullYear() === selectedYear),
+    [selectedYear, sortedReports]
+  );
+
+  const groups = useMemo(() => groupByMonth(visibleReports), [visibleReports]);
+
   return (
     <ThemedView style={styles.screen}>
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView style={styles.scrollView} contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}>
 
-          <View style={styles.header}>
-            <ThemedText style={[styles.company, { color: theme.accent }]}>{COMPANY_NAME}</ThemedText>
-            <ThemedText type="subtitle" style={isCompact ? styles.titleCompact : undefined}>
-              Rapports enregistrés
-            </ThemedText>
-            <ThemedText themeColor="textSecondary" style={[styles.lead, isCompact && styles.leadCompact]}>
-              Retrouve ici les rapports saisis sur l&apos;appareil et rouvre un dossier en un appui.
-            </ThemedText>
-          </View>
+          <ThemedText themeColor="textSecondary" style={styles.lead}>
+            Les rapports enregistrés se consultent et s&apos;exportent, ils ne se modifient plus.
+          </ThemedText>
 
           {loading ? (
-            <SectionCard style={styles.loadingCard}>
+            <SectionCard style={styles.noticeCard}>
               <ActivityIndicator color={theme.accent} />
               <ThemedText>Chargement des rapports…</ThemedText>
             </SectionCard>
-          ) : reports.length === 0 ? (
+          ) : sortedReports.length === 0 ? (
             <SectionCard>
               <ThemedText style={styles.emptyTitle}>Aucun rapport enregistré</ThemedText>
               <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-                Commence une intervention puis enregistre-la pour la retrouver ici.
+                Saisis une intervention puis enregistre-la pour la retrouver ici.
               </ThemedText>
               <PrimaryButton
-                title="Créer un rapport"
                 onPress={() => router.push('/report/new')}
                 style={styles.fullWidth}
+                title="Nouveau rapport"
               />
             </SectionCard>
           ) : (
-            <View style={styles.list}>
-              {reports.map((report) => (
-                <Pressable
-                  key={report.id}
-                  accessibilityRole="button"
-                  onPress={() =>
-                    router.push({
-                      pathname: '/report/new',
-                      params: { draftId: report.id },
-                    })
-                  }
-                  style={({ pressed }) => [{ opacity: pressed ? 0.78 : 1 }]}>
-                  <SectionCard style={styles.reportCard}>
-                    <View style={styles.reportCardInner}>
-                      <View style={styles.reportCardMain}>
-                        <ThemedText style={styles.customerName}>{getReportTitle()}</ThemedText>
-                        <ThemedText themeColor="textSecondary" style={styles.updatedText}>
-                          Mis à jour : {formatDate(report.updatedAt)}
-                        </ThemedText>
-                      </View>
-                      <View style={[styles.chevronWrapper, { borderColor: theme.backgroundSelected }]}>
-                        <ThemedText style={[styles.chevron, { color: theme.textSecondary }]}>›</ThemedText>
-                      </View>
+            <>
+              {years.length > 1 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.filterRow}>
+                  <FilterChip
+                    label="Toutes les années"
+                    onPress={() => setSelectedYear(null)}
+                    selected={selectedYear === null}
+                  />
+                  {years.map((year) => (
+                    <FilterChip
+                      key={year}
+                      label={String(year)}
+                      onPress={() => setSelectedYear(year)}
+                      selected={selectedYear === year}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+
+              <ThemedText themeColor="textSecondary" style={styles.count}>
+                {visibleReports.length} rapport{visibleReports.length > 1 ? 's' : ''}
+              </ThemedText>
+
+              {groups.map((group) => (
+                <View key={group.key} style={styles.group}>
+                  <ThemedText style={[styles.monthLabel, { color: theme.textSecondary }]}>
+                    {group.label}
+                  </ThemedText>
+                  <SectionCard>
+                    <View>
+                      {group.reports.map((report, index) => (
+                        <ReportRow
+                          key={report.id}
+                          onPress={() =>
+                            router.push({ pathname: '/report/[id]', params: { id: report.id } })
+                          }
+                          report={report}
+                          showDivider={index > 0}
+                        />
+                      ))}
                     </View>
                   </SectionCard>
-                </Pressable>
+                </View>
               ))}
-            </View>
+            </>
           )}
         </ScrollView>
       </SafeAreaView>
@@ -165,36 +240,18 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     maxWidth: MaxContentWidth,
     gap: Spacing.three,
-    paddingTop: Spacing.four,
+    paddingTop: Spacing.three,
     paddingBottom: BottomTabInset + Spacing.five,
   },
-  header: {
-    gap: Spacing.two,
+  lead: {
+    fontSize: 15,
+    lineHeight: 22,
     paddingHorizontal: Spacing.half,
   },
-  company: {
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  lead: {
-    fontSize: 17,
-    lineHeight: 25,
-  },
-  leadCompact: {
-    fontSize: 16,
-    lineHeight: 24,
-  },
-  titleCompact: {
-    fontSize: 24,
-    lineHeight: 30,
-  },
-  loadingCard: {
+  noticeCard: {
     alignItems: 'center',
-    gap: Spacing.three,
     flexDirection: 'row',
+    gap: Spacing.three,
     justifyContent: 'center',
   },
   emptyTitle: {
@@ -206,46 +263,41 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 24,
   },
-  fullWidth: {
-    width: '100%',
-  },
-  list: {
-    gap: Spacing.two,
-  },
-  reportCard: {
-    gap: 0,
-    padding: Spacing.three,
-  },
-  reportCardInner: {
+  filterRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: Spacing.two,
+    paddingHorizontal: Spacing.half,
+    paddingVertical: Spacing.half,
   },
-  reportCardMain: {
-    flex: 1,
-    gap: Spacing.one,
+  chip: {
+    borderWidth: 1,
+    borderRadius: Radius.xl,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: Spacing.three,
   },
-  customerName: {
-    fontSize: 18,
-    lineHeight: 24,
+  chipLabel: {
+    fontSize: 14,
+    lineHeight: 20,
     fontWeight: '700',
   },
-  updatedText: {
+  count: {
     fontSize: 13,
     lineHeight: 18,
+    paddingHorizontal: Spacing.half,
   },
-  chevronWrapper: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    flexShrink: 0,
+  group: {
+    gap: Spacing.one,
   },
-  chevron: {
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: '300',
+  monthLabel: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    paddingHorizontal: Spacing.half,
+  },
+  fullWidth: {
+    width: '100%',
   },
 });

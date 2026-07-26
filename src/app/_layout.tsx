@@ -6,9 +6,15 @@ import { useColorScheme } from 'react-native';
 
 import { APP_SHORT_NAME } from '@/constants/company';
 import { Colors } from '@/constants/theme';
+import { purgeGeneratedPdfs } from '@/lib/pdf-cache';
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+
+  // Clear PDFs left in the cache by earlier sessions.
+  React.useEffect(() => {
+    purgeGeneratedPdfs();
+  }, []);
   const palette = colorScheme === 'dark' ? Colors.dark : Colors.light;
   const baseTheme = colorScheme === 'dark' ? DarkTheme : DefaultTheme;
 
@@ -42,6 +48,10 @@ export default function RootLayout() {
         <Stack.Screen name="history" options={{ title: 'Rapports enregistrés' }} />
         <Stack.Screen
           name="report/new"
+          options={{ title: 'Nouveau rapport' }}
+        />
+        <Stack.Screen
+          name="report/[id]"
           options={{ title: APP_SHORT_NAME }}
         />
       </Stack>

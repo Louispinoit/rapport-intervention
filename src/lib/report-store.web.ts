@@ -22,15 +22,28 @@ function writeWebDrafts(drafts: ReportDraft[]) {
 function summarize(report: ReportDraft): ReportSummary {
   return {
     id: report.id,
-    customerName: report.customerName,
     interventionDate: report.interventionDate,
-    jobLocation: report.jobLocation,
     updatedAt: report.updatedAt,
   };
 }
 
 export async function initReportStore() {
   return;
+}
+
+export async function getSetting(key: string) {
+  return localStorage.getItem(`${WEB_STORAGE_KEY}-${key}`);
+}
+
+export async function setSetting(key: string, value: string | null) {
+  const storageKey = `${WEB_STORAGE_KEY}-${key}`;
+
+  if (value === null) {
+    localStorage.removeItem(storageKey);
+    return;
+  }
+
+  localStorage.setItem(storageKey, value);
 }
 
 export async function saveReportDraft(report: ReportDraft) {

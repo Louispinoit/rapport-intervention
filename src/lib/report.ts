@@ -1,8 +1,11 @@
+import { StorageAccessFramework } from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
 import { COMPANY_NAME } from '@/constants/company';
+import { purgeGeneratedPdfs } from '@/lib/pdf-cache';
+import { getSetting, setSetting } from '@/lib/report-store';
 
 export const serviceOptions = [
   'Ramonage',
@@ -59,17 +62,15 @@ export const woodBestPracticeItems = [
   'Éviter la mise au ralenti excessive, notamment la nuit.',
 ] as const;
 
+/**
+ * No client identity here on purpose: the report always travels with the Abby
+ * invoice, which carries the customer. The date is what identifies it.
+ */
 export type ReportDraft = {
   id: string;
   createdAt: string;
   updatedAt: string;
-  technicianName: string;
-  customerName: string;
-  customerAddress: string;
-  customerContact: string;
-  jobLocation: string;
   interventionDate: string;
-  olderThanTwoYears: boolean;
   services: string[];
   sootTypes: string[];
   sootVolume: string;
@@ -80,14 +81,39 @@ export type ReportDraft = {
 
 export type ReportSummary = {
   id: string;
-  customerName: string;
   interventionDate: string;
-  jobLocation: string;
   updatedAt: string;
 };
 
 function todayAsFrenchDate() {
   return new Intl.DateTimeFormat('fr-FR').format(new Date());
+}
+
+/** `interventionDate` is stored the way it is printed: jj/mm/aaaa. */
+export function parseInterventionDate(value: string) {
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
+
+  if (!match) {
+    return null;
+  }
+
+  const [, day, month, year] = match;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/** The date a report is filed under: the intervention itself, else when it was saved. */
+export function reportDate(summary: Pick<ReportSummary, 'interventionDate' | 'updatedAt'>) {
+  const interventionDate = parseInterventionDate(summary.interventionDate);
+
+  if (interventionDate) {
+    return interventionDate;
+  }
+
+  const savedAt = new Date(summary.updatedAt);
+
+  return Number.isNaN(savedAt.getTime()) ? new Date(0) : savedAt;
 }
 
 export function createEmptyReport(): ReportDraft {
@@ -97,13 +123,7 @@ export function createEmptyReport(): ReportDraft {
     id: `report-${Date.now()}`,
     createdAt: timestamp,
     updatedAt: timestamp,
-    technicianName: '',
-    customerName: '',
-    customerAddress: '',
-    customerContact: '',
-    jobLocation: '',
     interventionDate: todayAsFrenchDate(),
-    olderThanTwoYears: true,
     services: [],
     sootTypes: [],
     sootVolume: '',
@@ -128,6 +148,11 @@ function escapeHtml(value: string) {
     .replaceAll("'", '&#39;');
 }
 
+// A4 at 72 PPI, the unit expo-print expects. Without this the page defaults to
+// US Letter (612x792).
+const A4_WIDTH = 595;
+const A4_HEIGHT = 842;
+
 export function buildReportHtml(report: ReportDraft) {
   const RED = '#BA1E26';
   const RED_BG = '#FFF5F6';
@@ -140,10 +165,6 @@ export function buildReportHtml(report: ReportDraft) {
       ? '<span style="display:inline-block;width:11px;height:11px;background:' + RED + ';border:1px solid ' + RED + ';color:white;font-size:8px;font-weight:bold;line-height:11px;text-align:center;flex-shrink:0;">&#x2713;</span>'
       : '<span style="display:inline-block;width:11px;height:11px;border:1px solid #AAAAAA;background:white;flex-shrink:0;"></span>';
     return '<div style="display:flex;align-items:center;gap:5px;font-size:9px;padding:4px 0;">' + box + '<span>' + escapeHtml(option) + '</span></div>';
-  }
-
-  function sec(title: string) {
-    return '<div style="font-size:7.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;background:' + RED + ';color:white;padding:5px 9px;margin-bottom:6px;">' + title + '</div>';
   }
 
   function inlineLabel(title: string) {
@@ -163,10 +184,6 @@ export function buildReportHtml(report: ReportDraft) {
 
   function legalItem(txt: string) {
     return '<div style="display:flex;align-items:flex-start;gap:5px;font-size:8px;line-height:1.35;color:#3A1A1A;margin-bottom:5px;"><span style="color:' + RED + ';font-weight:900;flex-shrink:0;margin-top:1px;">&#x25B8;</span><span>' + escapeHtml(txt) + '</span></div>';
-  }
-
-  function subLabel(txt: string) {
-    return '<div style="font-size:8px;font-weight:700;color:' + MUTED + ';text-transform:uppercase;letter-spacing:0.5px;margin:9px 0 4px;">' + txt + '</div>';
   }
 
   function subLabelFirst(txt: string) {
@@ -274,14 +291,49 @@ export function buildReportHtml(report: ReportDraft) {
 
   const footer = '<div style="margin-top:12px;padding-top:5px;border-top:0.5px solid #D4D4D4;text-align:center;font-size:7.5px;color:#AAA;">Ramonage Marc Gomes Sud Vend&eacute;e &middot; 42 rue des Orch&icirc;d&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77</div>';
 
-  const pageStyle = '@page { margin: 12mm 12mm; }';
-  const bodyStyle = 'font-family: Arial, Helvetica, sans-serif; color: ' + TEXT + '; margin: 0; font-size: 10px; line-height: 1.4; background: white;';
+  // Android's print WebView ignores `@page { margin }`, which pushes the content
+  // flush against the paper edge and clips right-hand borders. The margin is a
+  // real padding on a wrapper instead, so it holds on every platform.
+  // No `size` here on purpose: the paper is already set to A4 by the width/height
+  // passed to printToFileAsync. Declaring it again makes Chromium fit the content
+  // to its own page box and anchor it top-left, leaving a gap on the right.
+  const pageStyle = '@page { margin: 0; }';
+  const bodyStyle = 'font-family: Arial, Helvetica, sans-serif; color: ' + TEXT + '; margin: 0; padding: 0; font-size: 10px; line-height: 1.4; background: white; -webkit-print-color-adjust: exact; print-color-adjust: exact;';
+
+  // The page width is pinned in `pt` rather than left to `auto`/`100%`. Android
+  // creates the printing WebView without ever attaching or measuring it, so its
+  // layout viewport is not the paper width, and content sized against that
+  // viewport ends up narrower than the sheet and flush left. 1pt = 1/72in, the
+  // same unit printToFileAsync takes, so this matches the paper exactly.
+  const pageWidth = A4_WIDTH + 'pt';
 
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><style>' +
-    pageStyle + ' * { box-sizing: border-box; } body { ' + bodyStyle + ' } table { border-collapse: collapse; width: 100%; } h1, h2, h3, p { margin: 0; }' +
-    '</style></head><body>' +
+    pageStyle + ' * { box-sizing: border-box; } body { ' + bodyStyle + ' }' +
+    ' .page { width: ' + pageWidth + '; padding: 12mm; }' +
+    ' table { border-collapse: collapse; width: 100%; } h1, h2, h3, p { margin: 0; }' +
+    '</style></head><body><div class="page">' +
     header + titleBar + legalBox + prestation + rapport + row2 + observations + footer +
-    '</body></html>';
+    '</div></body></html>';
+}
+
+const PAGE_OPTIONS = {
+  width: A4_WIDTH,
+  height: A4_HEIGHT,
+  margins: { top: 0, right: 0, bottom: 0, left: 0 },
+};
+
+/** Date first, so the file manager sorts reports chronologically on its own. */
+export function reportFileName(report: ReportDraft) {
+  const date = parseInterventionDate(report.interventionDate);
+  const stamp = date
+    ? [
+        date.getFullYear(),
+        String(date.getMonth() + 1).padStart(2, '0'),
+        String(date.getDate()).padStart(2, '0'),
+      ].join('-')
+    : 'sans-date';
+
+  return `rapport-${stamp}.pdf`;
 }
 
 export async function exportReportPdf(report: ReportDraft) {
@@ -292,7 +344,9 @@ export async function exportReportPdf(report: ReportDraft) {
     return null;
   }
 
-  const { uri } = await Print.printToFileAsync({ html });
+  purgeGeneratedPdfs();
+
+  const { uri } = await Print.printToFileAsync({ html, ...PAGE_OPTIONS });
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, {
       dialogTitle: `Partager le rapport - ${COMPANY_NAME}`,
@@ -300,4 +354,86 @@ export async function exportReportPdf(report: ReportDraft) {
     });
   }
   return uri;
+}
+
+export type SavePdfResult =
+  | { status: 'saved'; name: string }
+  | { status: 'shared' }
+  | { status: 'cancelled' };
+
+const SAVE_DIRECTORY_KEY = 'pdf-save-directory';
+
+/** Asks for a folder and remembers it, so later saves are a single tap. */
+export async function chooseSaveDirectory() {
+  const permissions = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+
+  if (!permissions.granted) {
+    return null;
+  }
+
+  await setSetting(SAVE_DIRECTORY_KEY, permissions.directoryUri);
+
+  return permissions.directoryUri;
+}
+
+async function writePdf(directoryUri: string, name: string, base64: string) {
+  const fileUri = await StorageAccessFramework.createFileAsync(
+    directoryUri,
+    name,
+    'application/pdf'
+  );
+  await StorageAccessFramework.writeAsStringAsync(fileUri, base64, { encoding: 'base64' });
+}
+
+/**
+ * Writes the PDF where the user chooses. Android's share sheet is an ACTION_SEND
+ * intent, which the Files app does not answer, so saving needs the Storage
+ * Access Framework instead.
+ */
+export async function saveReportPdf(report: ReportDraft): Promise<SavePdfResult> {
+  if (Platform.OS !== 'android') {
+    // Elsewhere the share sheet already offers a "save to files" destination.
+    await exportReportPdf(report);
+    return { status: 'shared' };
+  }
+
+  const name = reportFileName(report);
+  const rememberedDirectory = await getSetting(SAVE_DIRECTORY_KEY);
+  const directoryUri = rememberedDirectory ?? (await chooseSaveDirectory());
+
+  if (!directoryUri) {
+    return { status: 'cancelled' };
+  }
+
+  purgeGeneratedPdfs();
+
+  const { base64 } = await Print.printToFileAsync({
+    html: buildReportHtml(report),
+    ...PAGE_OPTIONS,
+    base64: true,
+  });
+
+  if (!base64) {
+    throw new Error("Le PDF n'a pas pu être encodé.");
+  }
+
+  try {
+    await writePdf(directoryUri, name, base64);
+  } catch (error) {
+    // A remembered folder can be deleted, or its permission revoked by Android.
+    if (!rememberedDirectory) {
+      throw error;
+    }
+
+    await setSetting(SAVE_DIRECTORY_KEY, null);
+    const freshDirectory = await chooseSaveDirectory();
+
+    if (!freshDirectory) {
+      return { status: 'cancelled' };
+    }
+
+    await writePdf(freshDirectory, name, base64);
+  }
+
+  return { status: 'saved', name };
 }
