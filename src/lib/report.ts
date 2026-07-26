@@ -87,8 +87,25 @@ export type ReportSummary = {
   updatedAt: string;
 };
 
-/** The coordinate space signature strokes are captured and replayed in. */
-export const SIGNATURE_BOX = { width: 600, height: 200 } as const;
+/**
+ * The coordinate space signature strokes are captured and replayed in. Every
+ * surface that draws or displays a signature must use this exact aspect ratio,
+ * otherwise the two axes get scaled differently and the stroke comes out skewed.
+ */
+export const SIGNATURE_BOX = { width: 600, height: 260 } as const;
+
+/**
+ * Lowercases and strips accents so a search for "perrin" matches "Pérrin". Uses
+ * an explicit combining-mark range rather than a Unicode property escape, which
+ * is not dependable on Hermes.
+ */
+export function normalizeForSearch(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim();
+}
 
 export function customerFullName(report: {
   customerFirstName: string;
@@ -322,19 +339,25 @@ export function buildReportHtml(report: ReportDraft) {
     '</p>',
   ].join('');
 
+  // Reserves exactly the height a signature would take, so an unsigned report
+  // keeps the same layout as a signed one.
+  const signatureSpacer =
+    '<div style="width:100%;aspect-ratio:' + SIGNATURE_BOX.width + '/' + SIGNATURE_BOX.height + ';"></div>';
+
   // Strokes are replayed as SVG, so the signature stays crisp at print resolution
   // instead of being a rasterised image scaled to the page.
   const signaturePaths = report.signature
     .map((stroke) => '<path d="' + escapeHtml(stroke) + '" fill="none" stroke="' + TEXT + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>')
     .join('');
   const signatureBox = report.signature.length
-    ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + SIGNATURE_BOX.width + ' ' + SIGNATURE_BOX.height + '" style="width:100%;height:58px;">' + signaturePaths + '</svg>'
-    : '<div style="height:58px;"></div>';
+    // No fixed height: the viewBox aspect ratio drives it, so the printed stroke
+    // has the same proportions as the one drawn on screen.
+    ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + SIGNATURE_BOX.width + ' ' + SIGNATURE_BOX.height + '" style="width:100%;display:block;">' + signaturePaths + '</svg>'
+    : signatureSpacer;
 
+  // Only the client signs: Marc is identified by the letterhead and by the invoice.
   const signature = [
-    '<table style="table-layout:fixed;border-collapse:collapse;width:100%;margin-top:14px;">',
-    '<tr>',
-    '<td style="width:52%;vertical-align:bottom;padding-right:14px;">',
+    '<div style="width:52%;margin-top:14px;">',
     inlineLabel('Signature du client'),
     signatureBox,
     '<div style="border-top:0.5px solid ' + MUTED + ';padding-top:3px;font-size:7.5px;color:' + MUTED + ';">',
@@ -342,14 +365,7 @@ export function buildReportHtml(report: ReportDraft) {
       ? escapeHtml(customerFullName(report) || 'Client')
       : 'Non sign&eacute;',
     '</div>',
-    '</td>',
-    '<td style="width:48%;vertical-align:bottom;">',
-    inlineLabel('Le technicien'),
-    '<div style="height:58px;"></div>',
-    '<div style="border-top:0.5px solid ' + MUTED + ';padding-top:3px;font-size:7.5px;color:' + MUTED + ';">Ramonage Marc Gomes Sud Vend&eacute;e</div>',
-    '</td>',
-    '</tr>',
-    '</table>',
+    '</div>',
   ].join('');
 
   const footer = '<div style="margin-top:12px;padding-top:5px;border-top:0.5px solid #D4D4D4;text-align:center;font-size:7.5px;color:#AAA;">Ramonage Marc Gomes Sud Vend&eacute;e &middot; 42 rue des Orch&icirc;d&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77</div>';

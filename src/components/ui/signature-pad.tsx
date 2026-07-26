@@ -182,10 +182,12 @@ export function SignatureField({ strokes, onChange }: SignatureFieldProps) {
               ) : null}
             </View>
 
-            <SignatureCanvas
-              onAddStroke={(stroke) => setDraft((current) => [...current, stroke])}
-              strokes={draft}
-            />
+            <View style={styles.canvasArea}>
+              <SignatureCanvas
+                onAddStroke={(stroke) => setDraft((current) => [...current, stroke])}
+                strokes={draft}
+              />
+            </View>
 
             <View style={styles.modalActions}>
               <PrimaryButton
@@ -213,9 +215,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   preview: {
+    width: '100%',
+    aspectRatio: SIGNATURE_BOX.width / SIGNATURE_BOX.height,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: Radius.md,
-    height: 120,
   },
   fullWidth: {
     width: '100%',
@@ -248,15 +251,26 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.one,
   },
   canvas: {
-    flex: 1,
+    // Same shape as the capture space, so a finger is followed one to one instead
+    // of each axis being scaled independently.
+    width: '100%',
+    aspectRatio: SIGNATURE_BOX.width / SIGNATURE_BOX.height,
     borderWidth: 1,
     borderRadius: Radius.md,
     justifyContent: 'center',
     overflow: 'hidden',
   },
+  canvasArea: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   canvasHint: {
     position: 'absolute',
-    alignSelf: 'center',
+    // Spanning the full width, not shrink-wrapped: ThemedText carries a
+    // flexShrink that was clipping this to "Signer avec le".
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     fontSize: 15,
     lineHeight: 22,
     fontStyle: 'italic',

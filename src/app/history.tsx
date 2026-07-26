@@ -7,6 +7,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -19,7 +20,12 @@ import { ReportRow } from '@/components/ui/report-row';
 import { SectionCard } from '@/components/ui/section-card';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { reportDate, type ReportSummary } from '@/lib/report';
+import {
+  customerFullName,
+  normalizeForSearch,
+  reportDate,
+  type ReportSummary,
+} from '@/lib/report';
 import { deleteReportDraft, listReportDrafts } from '@/lib/report-store';
 
 const monthFormatter = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
@@ -46,6 +52,31 @@ function groupByMonth(reports: ReportSummary[]): MonthGroup[] {
   }
 
   return [...groups.values()];
+}
+
+/**
+ * One field searches both the client and the date, because that is how Marc
+ * remembers a job: a name, or roughly when it happened. The month name is folded
+ * in so "juillet" works as well as "07/2026".
+ */
+function searchHaystack(report: ReportSummary) {
+  return normalizeForSearch(
+    [customerFullName(report), report.interventionDate, monthFormatter.format(reportDate(report))]
+      .filter(Boolean)
+      .join(' ')
+  );
+}
+
+function matchesQuery(report: ReportSummary, query: string) {
+  const tokens = normalizeForSearch(query).split(/\s+/).filter(Boolean);
+
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  const haystack = searchHaystack(report);
+
+  return tokens.every((token) => haystack.includes(token));
 }
 
 function FilterChip({
@@ -88,6 +119,7 @@ export default function HistoryScreen() {
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
   const isCompact = width < 430;
   const horizontalPadding = isCompact ? Spacing.three : Spacing.four;
 
@@ -144,10 +176,12 @@ export default function HistoryScreen() {
 
   const visibleReports = useMemo(
     () =>
-      selectedYear === null
-        ? sortedReports
-        : sortedReports.filter((report) => reportDate(report).getFullYear() === selectedYear),
-    [selectedYear, sortedReports]
+      sortedReports
+        .filter(
+          (report) => selectedYear === null || reportDate(report).getFullYear() === selectedYear
+        )
+        .filter((report) => matchesQuery(report, query)),
+    [query, selectedYear, sortedReports]
   );
 
   const groups = useMemo(() => groupByMonth(visibleReports), [visibleReports]);
@@ -182,6 +216,40 @@ export default function HistoryScreen() {
             </SectionCard>
           ) : (
             <>
+              <View
+                style={[
+                  styles.search,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    borderColor: theme.backgroundSelected,
+                  },
+                ]}>
+                <TextInput
+                  accessibilityLabel="Rechercher un rapport par client ou par date"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={setQuery}
+                  placeholder="Nom du client ou date"
+                  placeholderTextColor={theme.textSecondary}
+                  returnKeyType="search"
+                  selectionColor={theme.accent}
+                  style={[styles.searchInput, { color: theme.text }]}
+                  value={query}
+                />
+                {query.length > 0 ? (
+                  <Pressable
+                    accessibilityLabel="Effacer la recherche"
+                    accessibilityRole="button"
+                    hitSlop={8}
+                    onPress={() => setQuery('')}
+                    style={styles.searchClear}>
+                    <ThemedText style={[styles.searchClearText, { color: theme.textSecondary }]}>
+                      ✕
+                    </ThemedText>
+                  </Pressable>
+                ) : null}
+              </View>
+
               {years.length > 1 ? (
                 <ScrollView
                   horizontal
@@ -207,28 +275,37 @@ export default function HistoryScreen() {
                 {visibleReports.length} rapport{visibleReports.length > 1 ? 's' : ''}
               </ThemedText>
 
-              {groups.map((group) => (
-                <View key={group.key} style={styles.group}>
-                  <ThemedText style={[styles.monthLabel, { color: theme.textSecondary }]}>
-                    {group.label}
+              {visibleReports.length === 0 ? (
+                <SectionCard>
+                  <ThemedText style={styles.emptyTitle}>Aucun résultat</ThemedText>
+                  <ThemedText themeColor="textSecondary" style={styles.emptyText}>
+                    Aucun rapport ne correspond à cette recherche.
                   </ThemedText>
-                  <SectionCard>
-                    <View>
-                      {group.reports.map((report, index) => (
-                        <ReportRow
-                          key={report.id}
-                          onDelete={() => removeReport(report.id)}
-                          onPress={() =>
-                            router.push({ pathname: '/report/[id]', params: { id: report.id } })
-                          }
-                          report={report}
-                          showDivider={index > 0}
-                        />
-                      ))}
-                    </View>
-                  </SectionCard>
-                </View>
-              ))}
+                </SectionCard>
+              ) : (
+                groups.map((group) => (
+                  <View key={group.key} style={styles.group}>
+                    <ThemedText style={[styles.monthLabel, { color: theme.textSecondary }]}>
+                      {group.label}
+                    </ThemedText>
+                    <SectionCard>
+                      <View>
+                        {group.reports.map((report, index) => (
+                          <ReportRow
+                            key={report.id}
+                            onDelete={() => removeReport(report.id)}
+                            onPress={() =>
+                              router.push({ pathname: '/report/[id]', params: { id: report.id } })
+                            }
+                            report={report}
+                            showDivider={index > 0}
+                          />
+                        ))}
+                      </View>
+                    </SectionCard>
+                  </View>
+                ))
+              )}
             </>
           )}
         </ScrollView>
@@ -277,6 +354,28 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 16,
     lineHeight: 24,
+  },
+  search: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.three,
+  },
+  searchInput: {
+    flex: 1,
+    minHeight: 52,
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  searchClear: {
+    paddingHorizontal: Spacing.two,
+    paddingVertical: Spacing.one,
+  },
+  searchClearText: {
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
   },
   filterRow: {
     flexDirection: 'row',
