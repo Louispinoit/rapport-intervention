@@ -15,7 +15,7 @@ import { ThemedView } from '@/components/themed-view';
 import { CheckRow } from '@/components/ui/check-row';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { SectionCard } from '@/components/ui/section-card';
-import { SignaturePad } from '@/components/ui/signature-pad';
+import { SignatureField } from '@/components/ui/signature-pad';
 import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import {
@@ -316,7 +316,7 @@ export default function NewReportScreen() {
           {/* Section 05 - Signature */}
           <SectionCard>
             <SectionHeader number="05" title="Signature" compact={isCompact} />
-            <SignaturePad
+            <SignatureField
               onChange={(strokes) => updateField('signature', strokes)}
               strokes={report.signature}
             />

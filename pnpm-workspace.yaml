@@ -1,2 +1,5 @@
 allowBuilds:
   unrs-resolver: true
+# pnpm truncates virtual store paths to 60 chars on Windows and 120 elsewhere;
+# pinning it keeps installs identical between this machine and Linux CI.
+virtualStoreDirMaxLength: 60

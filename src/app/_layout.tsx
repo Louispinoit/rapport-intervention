@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { useColorScheme } from 'react-native';
 
+import { UpdateBanner } from '@/components/ui/update-banner';
 import { APP_SHORT_NAME } from '@/constants/company';
 import { Colors } from '@/constants/theme';
 import { purgeGeneratedPdfs, purgeSavedPdfs } from '@/lib/pdf-cache';
@@ -35,6 +36,8 @@ export default function RootLayout() {
         },
       }}>
       <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      {/* Above the navigator so it takes its own space and never covers a control. */}
+      <UpdateBanner />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: palette.backgroundElement },
