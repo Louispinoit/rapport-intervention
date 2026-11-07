@@ -2,7 +2,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
-import Animated, { Easing, FadeInDown, Keyframe, useReducedMotion } from 'react-native-reanimated';
+import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -44,20 +44,33 @@ const STAMP_IMPACT = 0.62;
  * Played once, right after saving: the stamp drops onto the page, lands a touch
  * flat and settles at its tilt. It accelerates into the paper (a falling object)
  * and eases out of the impact, so the haptic can fire on contact.
+ *
+ * A style animation rather than an `entering` layout animation: on web the
+ * latter pulls the element out of the flow while it plays, and the stamp ended
+ * up stuck on top of the customer's name.
  */
-const stampLanding = new Keyframe({
-  0: { opacity: 0, transform: [{ scale: 1.9 }, { rotate: '-10deg' }] },
-  [STAMP_IMPACT * 100]: {
+const stampLanding = {
+  '0%': {
+    opacity: 0,
+    transform: [{ scale: 1.9 }, { rotate: '-10deg' }],
+    animationTimingFunction: 'ease-in' as const,
+  },
+  [`${STAMP_IMPACT * 100}%`]: {
     opacity: 1,
     transform: [{ scale: 0.94 }, { rotate: '-1deg' }],
-    easing: Easing.in(Easing.quad),
+    animationTimingFunction: 'ease-out' as const,
   },
-  100: {
+  '100%': {
     opacity: 1,
     transform: [{ scale: 1 }, { rotate: '-2deg' }],
-    easing: Easing.bezier(0.23, 1, 0.32, 1),
   },
-}).duration(STAMP_DURATION);
+};
+
+/** The Abby prompt rises into place; same reason as above for a style animation. */
+const promptRise = {
+  from: { opacity: 0, transform: [{ translateY: 12 }] },
+  to: { opacity: 1, transform: [{ translateY: 0 }] },
+};
 
 /** Saved reports show what was ticked, not the options that were left empty. */
 function SelectedList({ title, values }: { title?: string; values: string[] }) {
@@ -202,8 +215,17 @@ export default function SavedReportScreen() {
       <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
         {invoicePrompt ? (
           <Animated.View
-            entering={FadeInDown.duration(260).easing(Easing.bezier(0.23, 1, 0.32, 1))}
-            style={[styles.prompt, { backgroundColor: theme.text }]}>
+            style={[
+              styles.prompt,
+              { backgroundColor: theme.text },
+              reducedMotion
+                ? null
+                : {
+                    animationName: promptRise,
+                    animationDuration: 260,
+                    animationTimingFunction: 'ease-out',
+                  },
+            ]}>
             <View style={styles.promptHead}>
               <View style={[styles.promptCheck, { backgroundColor: theme.accent }]}>
                 <CheckIcon color={theme.accentForeground} size={16} />
@@ -235,8 +257,17 @@ export default function SavedReportScreen() {
         {/* Document head: who, when, and the stamp that says it is final. */}
         <View style={styles.docHead}>
           <Animated.View
-            entering={justSaved ? stampLanding : undefined}
-            style={[styles.stamp, { borderColor: theme.accent }]}>
+            style={[
+              styles.stamp,
+              { borderColor: theme.accent },
+              justSaved && !reducedMotion
+                ? {
+                    animationName: stampLanding,
+                    animationDuration: STAMP_DURATION,
+                    animationFillMode: 'both',
+                  }
+                : null,
+            ]}>
             <LockIcon color={theme.accent} size={13} />
             <ThemedText style={[styles.stampText, { color: theme.accent }]}>Enregistré</ThemedText>
           </Animated.View>
