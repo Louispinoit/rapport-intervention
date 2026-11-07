@@ -325,6 +325,7 @@ export default function HistoryScreen() {
                     })
                   }
                   report={item}
+                  inset={18}
                   showDivider={!first}
                 />
               </View>
@@ -377,23 +378,22 @@ const styles = StyleSheet.create({
   emptyResults: {
     marginTop: Spacing.three,
   },
+  // No side padding: the row carries it, so the red delete action sits flush
+  // with the edge of the sheet when swiped.
   sheetRow: {
     borderLeftWidth: StyleSheet.hairlineWidth,
     borderRightWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 14,
     overflow: 'hidden',
   },
   sheetFirst: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopLeftRadius: Radius.lg,
     borderTopRightRadius: Radius.lg,
-    paddingTop: 4,
   },
   sheetLast: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomLeftRadius: Radius.lg,
     borderBottomRightRadius: Radius.lg,
-    paddingBottom: 4,
   },
   emptyCard: {
     gap: Spacing.three,

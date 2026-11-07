@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
@@ -16,6 +16,8 @@ type ReportRowProps = {
   /** Passing this enables swipe-to-delete. */
   onDelete?: () => void;
   showDivider?: boolean;
+  /** Horizontal padding inside the row; a full-bleed list passes its sheet padding here. */
+  inset?: number;
 };
 
 const ACTION_WIDTH = 96;
@@ -28,7 +30,13 @@ const dayLong = new Intl.DateTimeFormat('fr-FR', {
   year: 'numeric',
 });
 
-export function ReportRow({ report, onPress, onDelete, showDivider = true }: ReportRowProps) {
+export function ReportRow({
+  report,
+  onPress,
+  onDelete,
+  showDivider = true,
+  inset = Spacing.one,
+}: ReportRowProps) {
   const theme = useTheme();
   const swipeable = useRef<SwipeableMethods>(null);
   const date = reportDate(report);
@@ -38,14 +46,24 @@ export function ReportRow({ report, onPress, onDelete, showDivider = true }: Rep
   const details = hasDate ? dayLong.format(date) : report.interventionDate;
 
   function confirmDelete() {
-    Alert.alert(
-      'Supprimer ce rapport ?',
-      `${title} sera définitivement effacé, avec la possibilité d'en régénérer le PDF.`,
-      [
-        { text: 'Annuler', style: 'cancel', onPress: () => swipeable.current?.close() },
-        { text: 'Supprimer', style: 'destructive', onPress: onDelete },
-      ]
-    );
+    const question = 'Supprimer ce rapport ?';
+    const consequence = `${title} sera définitivement effacé, et son PDF ne pourra plus être régénéré.`;
+
+    // Alert.alert is a silent no-op in the browser, so the web build asks with
+    // the browser's own confirm dialog instead.
+    if (Platform.OS === 'web') {
+      if (window.confirm(`${question}\n\n${consequence}`)) {
+        onDelete?.();
+      } else {
+        swipeable.current?.close();
+      }
+      return;
+    }
+
+    Alert.alert(question, consequence, [
+      { text: 'Annuler', style: 'cancel', onPress: () => swipeable.current?.close() },
+      { text: 'Supprimer', style: 'destructive', onPress: onDelete },
+    ]);
   }
 
   const row = (
@@ -56,6 +74,7 @@ export function ReportRow({ report, onPress, onDelete, showDivider = true }: Rep
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
+        { paddingHorizontal: inset },
         { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
         showDivider && {
           borderTopWidth: StyleSheet.hairlineWidth,
