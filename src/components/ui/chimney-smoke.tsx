@@ -2,7 +2,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { useReducedMotion } from 'react-native-reanimated';
 
 type ChimneySmokeProps = {
-  /** Size the ChimneyMark is drawn at, so the puffs line up with its brush. */
+  /** Size the ChimneyMark is drawn at, so the puffs line up with its chimney. */
   markSize: number;
   /** An opaque colour; the animation sets the transparency. */
   color: string;
@@ -19,7 +19,7 @@ const CYCLE = 4200;
 const PEAK_OPACITY = 0.22;
 
 /**
- * Soot puffs pushed out around the sweep's brush: each one rises, drifts with
+ * Smoke puffs rising from the chimney: each one rises, drifts with
  * the wind, swells and thins out. A CSS animation, so it runs on the UI thread
  * and keeps going smoothly while JavaScript is busy.
  */
@@ -45,10 +45,11 @@ export function ChimneySmoke({ markSize, color, running }: ChimneySmokeProps) {
     return null;
   }
 
-  // The brush is centred at (717, 120) with radius 96 in the mark's 1024 grid.
+  // The chimney's cap is centred on x=717 with its top at y=302 in the mark's
+  // 1024 grid; puffs start just inside it so they seem to come out of the flue.
   const k = markSize / 1024;
   const left = 717 * k - PUFF.width / 2;
-  const top = (120 - 96) * k - PUFF.height * 0.4;
+  const top = 302 * k - PUFF.height * 0.75;
 
   return (
     <View style={[styles.origin, { left, top }]}>

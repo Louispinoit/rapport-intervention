@@ -106,7 +106,7 @@ export default function HomeScreen() {
               markSize={WATERMARK_SIZE}
               running={isFocused}
             />
-            <ChimneyMark color={theme.liveryShade} size={WATERMARK_SIZE} />
+            <ChimneyMark brush={false} color={theme.liveryShade} size={WATERMARK_SIZE} />
           </View>
 
           <View style={styles.liveryInner}>

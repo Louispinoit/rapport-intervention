@@ -112,15 +112,28 @@ export function LockIcon({ color, size = 14, strokeWidth = 1.8 }: IconProps) {
  * The DSSV mark from the app icon: a roof, the chimney, and the sweep's brush
  * coming out of it. Drawn in vectors so it stays sharp at any size.
  */
-export function ChimneyMark({ color, size = 32 }: { color: string; size?: number }) {
+export function ChimneyMark({
+  color,
+  size = 32,
+  brush = true,
+}: {
+  color: string;
+  size?: number;
+  /** The sweep's brush on top. Left off where smoke rises from the chimney instead. */
+  brush?: boolean;
+}) {
   return (
     <Svg height={size} viewBox="0 0 1024 1024" width={size}>
       <Path d="M62 942L512 532L962 942Z" fill={color} />
       {/* Runs down past the roof line (y≈793 at its right edge) so it sits in the roof. */}
       <Rect fill={color} height={440} rx={12} width={164} x={635} y={373} />
       <Rect fill={color} height={72} rx={18} width={246} x={594} y={302} />
-      <Rect fill={color} height={92} rx={18} width={52} x={691} y={212} />
-      <Circle cx={717} cy={120} fill={color} r={96} />
+      {brush ? (
+        <>
+          <Rect fill={color} height={92} rx={18} width={52} x={691} y={212} />
+          <Circle cx={717} cy={120} fill={color} r={96} />
+        </>
+      ) : null}
     </Svg>
   );
 }
