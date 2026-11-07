@@ -1,4 +1,5 @@
 import type { ReportDraft, ReportSummary } from '@/lib/report';
+import { normalizeReportDraft } from '@/lib/report-defaults';
 
 const WEB_STORAGE_KEY = 'rapport-intervention-drafts';
 
@@ -9,7 +10,7 @@ function readWebDrafts() {
   }
 
   try {
-    return JSON.parse(rawValue) as ReportDraft[];
+    return (JSON.parse(rawValue) as Partial<ReportDraft>[]).map(normalizeReportDraft);
   } catch {
     return [] as ReportDraft[];
   }

@@ -4,7 +4,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -37,16 +37,19 @@ export function UpdateBanner() {
     <View
       style={[
         styles.banner,
-        { backgroundColor: theme.accent, paddingTop: insets.top + Spacing.two },
+        { backgroundColor: theme.text, paddingTop: insets.top + Spacing.two },
       ]}>
-      <ThemedText style={[styles.text, { color: theme.accentForeground }]}>
+      <ThemedText style={[styles.text, { color: theme.background }]}>
         Une mise à jour est prête.
       </ThemedText>
       <Pressable
         accessibilityRole="button"
         disabled={restarting}
         onPress={restart}
-        style={({ pressed }) => [styles.action, { opacity: pressed || restarting ? 0.6 : 1 }]}>
+        style={({ pressed }) => [
+          styles.action,
+          { backgroundColor: theme.accent, opacity: pressed || restarting ? 0.7 : 1 },
+        ]}>
         <ThemedText style={[styles.actionText, { color: theme.accentForeground }]}>
           {restarting ? 'Redémarrage…' : 'Redémarrer'}
         </ThemedText>
@@ -66,19 +69,19 @@ const styles = StyleSheet.create({
   },
   text: {
     flexShrink: 1,
+    fontFamily: FontFamily.bodyMedium,
     fontSize: 15,
     lineHeight: 22,
-    fontWeight: '500',
   },
   action: {
-    minHeight: 44,
+    minHeight: 40,
     justifyContent: 'center',
-    paddingHorizontal: Spacing.two,
+    borderRadius: Radius.pill,
+    paddingHorizontal: Spacing.three,
   },
   actionText: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '700',
-    textDecorationLine: 'underline',
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

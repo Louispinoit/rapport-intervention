@@ -116,10 +116,6 @@ export function customerFullName(report: {
     .join(' ');
 }
 
-function todayAsFrenchDate() {
-  return new Intl.DateTimeFormat('fr-FR').format(new Date());
-}
-
 /** `interventionDate` is stored the way it is printed: jj/mm/aaaa. */
 export function parseInterventionDate(value: string) {
   const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value.trim());
@@ -147,25 +143,7 @@ export function reportDate(summary: Pick<ReportSummary, 'interventionDate' | 'up
   return Number.isNaN(savedAt.getTime()) ? new Date(0) : savedAt;
 }
 
-export function createEmptyReport(): ReportDraft {
-  const timestamp = new Date().toISOString();
-
-  return {
-    id: `report-${Date.now()}`,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    interventionDate: todayAsFrenchDate(),
-    customerLastName: '',
-    customerFirstName: '',
-    services: [],
-    sootTypes: [],
-    sootVolume: '',
-    visibleDefects: [],
-    advice: [],
-    observations: '',
-    signature: [],
-  };
-}
+export { createEmptyReport, normalizeReportDraft } from '@/lib/report-defaults';
 
 export function toggleSelection(values: string[], value: string) {
   return values.includes(value)

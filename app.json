@@ -43,7 +43,21 @@
         }
       ],
       "expo-sqlite",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./node_modules/@expo-google-fonts/barlow-condensed/600SemiBold/BarlowCondensed_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/barlow-condensed/700Bold/BarlowCondensed_700Bold.ttf",
+            "./node_modules/@expo-google-fonts/barlow-condensed/800ExtraBold/BarlowCondensed_800ExtraBold.ttf",
+            "./node_modules/@expo-google-fonts/figtree/400Regular/Figtree_400Regular.ttf",
+            "./node_modules/@expo-google-fonts/figtree/500Medium/Figtree_500Medium.ttf",
+            "./node_modules/@expo-google-fonts/figtree/600SemiBold/Figtree_600SemiBold.ttf",
+            "./node_modules/@expo-google-fonts/figtree/700Bold/Figtree_700Bold.ttf"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

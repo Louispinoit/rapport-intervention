@@ -3,12 +3,12 @@ import { Alert, Pressable, StyleSheet, View } from 'react-native';
 import ReanimatedSwipeable, {
   type SwipeableMethods,
 } from 'react-native-gesture-handler/ReanimatedSwipeable';
-import Svg, { Path, Rect } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { ChevronRightIcon, TrashIcon } from '@/components/ui/icons';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { customerFullName, type ReportSummary } from '@/lib/report';
+import { customerFullName, reportDate, type ReportSummary } from '@/lib/report';
 
 type ReportRowProps = {
   report: ReportSummary;
@@ -18,42 +18,24 @@ type ReportRowProps = {
   showDivider?: boolean;
 };
 
-const ACTION_WIDTH = 92;
+const ACTION_WIDTH = 96;
 
-function formatUpdatedAt(value: string) {
-  const parsed = new Date(value);
-
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short' }).format(parsed);
-}
-
-function TrashIcon({ color }: { color: string }) {
-  return (
-    <Svg width={22} height={22} viewBox="0 0 24 24">
-      <Path d="M4 6.5h16" stroke={color} strokeWidth={2} strokeLinecap="round" />
-      <Path d="M9.5 6.5V4.5h5v2" stroke={color} strokeWidth={2} strokeLinejoin="round" fill="none" />
-      <Path
-        d="M6.5 6.5l1 13h9l1-13"
-        stroke={color}
-        strokeWidth={2}
-        strokeLinejoin="round"
-        fill="none"
-      />
-      <Rect x={10.6} y={9.5} width={1.2} height={7} rx={0.6} fill={color} />
-      <Rect x={13.2} y={9.5} width={1.2} height={7} rx={0.6} fill={color} />
-    </Svg>
-  );
-}
+const monthShort = new Intl.DateTimeFormat('fr-FR', { month: 'short' });
+const dayLong = new Intl.DateTimeFormat('fr-FR', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
 
 export function ReportRow({ report, onPress, onDelete, showDivider = true }: ReportRowProps) {
   const theme = useTheme();
   const swipeable = useRef<SwipeableMethods>(null);
-  const savedAt = formatUpdatedAt(report.updatedAt);
+  const date = reportDate(report);
+  const hasDate = date.getTime() > 0;
   const customer = customerFullName(report);
-  const date = report.interventionDate || savedAt;
-  const title = customer || `Intervention du ${date}`;
-  const details = customer ? `Intervention du ${date}` : '';
+  const title = customer || 'Client non renseigné';
+  const details = hasDate ? dayLong.format(date) : report.interventionDate;
 
   function confirmDelete() {
     Alert.alert(
@@ -68,26 +50,36 @@ export function ReportRow({ report, onPress, onDelete, showDivider = true }: Rep
 
   const row = (
     <Pressable
+      accessibilityHint="Ouvre le rapport"
+      accessibilityLabel={`${title}, ${details}`}
       accessibilityRole="button"
       onPress={onPress}
       style={({ pressed }) => [
         styles.row,
-        { backgroundColor: theme.backgroundElement },
+        { backgroundColor: pressed ? theme.backgroundSelected : theme.backgroundElement },
         showDivider && {
           borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: theme.backgroundSelected,
+          borderTopColor: theme.line,
         },
-        pressed && { backgroundColor: theme.accentSoft },
       ]}>
-      <View style={styles.main}>
-        <ThemedText style={styles.title}>{title}</ThemedText>
-        {details ? (
-          <ThemedText themeColor="textSecondary" style={styles.details}>
-            {details}
-          </ThemedText>
-        ) : null}
+      {/* The date as a ticket stub, the way a carnet is scanned: by day. */}
+      <View style={[styles.stub, { backgroundColor: theme.background, borderColor: theme.line }]}>
+        <ThemedText style={styles.stubDay}>{hasDate ? date.getDate() : '?'}</ThemedText>
+        <ThemedText style={[styles.stubMonth, { color: theme.accent }]}>
+          {hasDate ? monthShort.format(date).replace('.', '') : ''}
+        </ThemedText>
       </View>
-      <ThemedText style={[styles.chevron, { color: theme.textSecondary }]}>›</ThemedText>
+      <View style={styles.main}>
+        <ThemedText
+          numberOfLines={1}
+          style={[styles.title, !customer && { color: theme.textSecondary }]}>
+          {title}
+        </ThemedText>
+        <ThemedText numberOfLines={1} style={[styles.details, { color: theme.textSecondary }]}>
+          {details}
+        </ThemedText>
+      </View>
+      <ChevronRightIcon color={theme.textTertiary} />
     </Pressable>
   );
 
@@ -97,8 +89,8 @@ export function ReportRow({ report, onPress, onDelete, showDivider = true }: Rep
 
   return (
     <ReanimatedSwipeable
-      containerStyle={styles.swipeContainer}
       friction={2}
+      overshootRight={false}
       ref={swipeable}
       renderRightActions={() => (
         <Pressable
@@ -107,7 +99,7 @@ export function ReportRow({ report, onPress, onDelete, showDivider = true }: Rep
           onPress={confirmDelete}
           style={({ pressed }) => [
             styles.action,
-            { backgroundColor: theme.accent, opacity: pressed ? 0.8 : 1 },
+            { backgroundColor: pressed ? theme.accentPressed : theme.accent },
           ]}>
           <TrashIcon color={theme.accentForeground} />
           <ThemedText style={[styles.actionText, { color: theme.accentForeground }]}>
@@ -115,54 +107,65 @@ export function ReportRow({ report, onPress, onDelete, showDivider = true }: Rep
           </ThemedText>
         </Pressable>
       )}
-      rightThreshold={ACTION_WIDTH / 2}
-      overshootRight={false}>
+      rightThreshold={ACTION_WIDTH / 2}>
       {row}
     </ReanimatedSwipeable>
   );
 }
 
 const styles = StyleSheet.create({
-  swipeContainer: {
-    borderRadius: Radius.sm,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
-    minHeight: 60,
-    paddingVertical: Spacing.two,
+    gap: 14,
+    minHeight: 72,
+    paddingVertical: 12,
     paddingHorizontal: Spacing.one,
-    borderRadius: Radius.sm,
+  },
+  stub: {
+    width: 50,
+    height: 50,
+    borderRadius: Radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stubDay: {
+    fontFamily: FontFamily.displayHeavy,
+    fontVariant: ['tabular-nums'],
+    fontSize: 22,
+    lineHeight: 22,
+  },
+  stubMonth: {
+    fontFamily: FontFamily.bodyBold,
+    fontSize: 10,
+    lineHeight: 13,
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
   main: {
     flex: 1,
-    gap: Spacing.half,
+    gap: 2,
   },
   title: {
-    fontSize: 16,
+    fontFamily: FontFamily.bodySemibold,
+    fontSize: 17,
     lineHeight: 22,
-    fontWeight: '700',
   },
   details: {
+    fontFamily: FontFamily.body,
     fontSize: 13,
     lineHeight: 18,
-  },
-  chevron: {
-    fontSize: 22,
-    lineHeight: 26,
-    fontWeight: '300',
   },
   action: {
     width: ACTION_WIDTH,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.half,
-    borderRadius: Radius.sm,
+    gap: 4,
   },
   actionText: {
+    fontFamily: FontFamily.bodyBold,
     fontSize: 12,
     lineHeight: 16,
-    fontWeight: '700',
   },
 });

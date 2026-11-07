@@ -1,8 +1,11 @@
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 
 import { ThemedText } from '@/components/themed-text';
-import { Radius, Spacing } from '@/constants/theme';
+import { CheckIcon } from '@/components/ui/icons';
+import { FontFamily, Motion, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { tickHaptic } from '@/lib/haptics';
 
 type CheckRowProps = {
   label: string;
@@ -14,7 +17,7 @@ type CheckRowProps = {
   readOnly?: boolean;
 };
 
-const BOX = 22;
+const BOX = 24;
 
 export function CheckRow({
   label,
@@ -27,57 +30,81 @@ export function CheckRow({
   const theme = useTheme();
   const isRadio = shape === 'radio';
 
+  if (readOnly) {
+    // A saved report only lists what was ticked, so a box would be noise.
+    return (
+      <View style={[styles.row, showDivider && dividerStyle(theme.line)]}>
+        <View style={[styles.readMark, { backgroundColor: theme.accentSoft }]}>
+          <CheckIcon color={theme.accent} size={14} />
+        </View>
+        <ThemedText style={styles.label}>{label}</ThemedText>
+      </View>
+    );
+  }
+
   return (
     <Pressable
       accessibilityRole={isRadio ? 'radio' : 'checkbox'}
-      accessibilityState={{ checked, disabled: readOnly }}
-      disabled={readOnly}
-      onPress={onPress}
+      accessibilityState={{ checked }}
+      onPress={() => {
+        tickHaptic();
+        onPress?.();
+      }}
       style={({ pressed }) => [
         styles.row,
-        showDivider && {
-          borderTopWidth: StyleSheet.hairlineWidth,
-          borderTopColor: theme.backgroundSelected,
-        },
-        pressed && !readOnly && { backgroundColor: theme.accentSoft },
+        showDivider && dividerStyle(theme.line),
+        pressed && { backgroundColor: theme.backgroundSelected },
       ]}>
-      <View
+      <Animated.View
         style={[
           styles.box,
           isRadio && styles.boxRound,
           {
-            borderColor: checked ? theme.accent : theme.textSecondary,
-            backgroundColor: checked && !isRadio ? theme.accent : 'transparent',
+            borderColor: checked ? theme.accent : theme.lineStrong,
+            backgroundColor: checked && !isRadio ? theme.accent : theme.backgroundElement,
+            transitionProperty: ['backgroundColor', 'borderColor'],
+            transitionDuration: Motion.state,
+            transitionTimingFunction: 'ease-out',
           },
         ]}>
-        {checked ? (
-          isRadio ? (
+        <Animated.View
+          style={{
+            opacity: checked ? 1 : 0,
+            transform: [{ scale: checked ? 1 : 0.6 }],
+            transitionProperty: ['opacity', 'transform'],
+            transitionDuration: Motion.state,
+            transitionTimingFunction: 'ease-out',
+          }}>
+          {isRadio ? (
             <View style={[styles.dot, { backgroundColor: theme.accent }]} />
           ) : (
-            <ThemedText style={[styles.mark, { color: theme.accentForeground }]}>✓</ThemedText>
-          )
-        ) : null}
-      </View>
+            <CheckIcon color={theme.accentForeground} size={16} />
+          )}
+        </Animated.View>
+      </Animated.View>
       <ThemedText style={styles.label}>{label}</ThemedText>
     </Pressable>
   );
+}
+
+function dividerStyle(color: string) {
+  return { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: color };
 }
 
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.three,
-    minHeight: 52,
-    paddingVertical: Spacing.two,
+    gap: 14,
+    minHeight: 56,
+    paddingVertical: 10,
     paddingHorizontal: Spacing.one,
-    borderRadius: Radius.sm,
   },
   box: {
     width: BOX,
     height: BOX,
-    borderWidth: 2,
-    borderRadius: 5,
+    borderWidth: 1.5,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -85,18 +112,20 @@ const styles = StyleSheet.create({
     borderRadius: BOX / 2,
   },
   dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
-  mark: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '900',
-    textAlign: 'center',
+  readMark: {
+    width: BOX,
+    height: BOX,
+    borderRadius: BOX / 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   label: {
     flex: 1,
+    fontFamily: FontFamily.bodyMedium,
     fontSize: 16,
     lineHeight: 22,
   },

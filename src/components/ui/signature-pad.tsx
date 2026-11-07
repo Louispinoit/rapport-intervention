@@ -5,8 +5,9 @@ import Svg, { Path } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { PenIcon } from '@/components/ui/icons';
 import { PrimaryButton } from '@/components/ui/primary-button';
-import { Radius, Spacing } from '@/constants/theme';
+import { FontFamily, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { SIGNATURE_BOX } from '@/lib/report';
 
@@ -116,11 +117,14 @@ function SignatureCanvas({
       onLayout={handleLayout}
       style={[
         styles.canvas,
-        { backgroundColor: theme.backgroundElement, borderColor: theme.backgroundSelected },
+        { backgroundColor: theme.backgroundElement, borderColor: theme.line },
       ]}>
+      <View style={[styles.baseline, { borderTopColor: theme.lineStrong }]}>
+        <ThemedText style={[styles.baselineMark, { color: theme.textTertiary }]}>×</ThemedText>
+      </View>
       <Strokes color={theme.text} strokes={visible} />
       {visible.length === 0 ? (
-        <ThemedText themeColor="textSecondary" style={styles.canvasHint} pointerEvents="none">
+        <ThemedText themeColor="textSecondary" style={styles.canvasHint}>
           Signer avec le doigt
         </ThemedText>
       ) : null}
@@ -151,16 +155,20 @@ export function SignatureField({ strokes, onChange }: SignatureFieldProps) {
   return (
     <View style={styles.field}>
       {strokes.length > 0 ? (
-        <View style={[styles.preview, { borderColor: theme.backgroundSelected }]}>
+        <View
+          style={[styles.preview, { backgroundColor: theme.background, borderColor: theme.line }]}>
           <Strokes color={theme.text} strokes={strokes} />
         </View>
       ) : (
-        <ThemedText themeColor="textSecondary" style={styles.empty}>
-          Le client n&apos;a pas encore signé.
-        </ThemedText>
+        <View style={[styles.emptyBox, { borderColor: theme.lineStrong }]}>
+          <ThemedText themeColor="textSecondary" style={styles.empty}>
+            Le client n&apos;a pas encore signé.
+          </ThemedText>
+        </View>
       )}
 
       <PrimaryButton
+        icon={(color) => <PenIcon color={color} size={19} />}
         onPress={start}
         style={styles.fullWidth}
         title={strokes.length > 0 ? 'Refaire la signature' : 'Faire signer le client'}
@@ -210,9 +218,33 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   empty: {
+    fontFamily: FontFamily.body,
     fontSize: 15,
     lineHeight: 22,
-    fontStyle: 'italic',
+    textAlign: 'center',
+  },
+  emptyBox: {
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderRadius: Radius.md,
+    paddingVertical: Spacing.four,
+    paddingHorizontal: Spacing.three,
+  },
+  baseline: {
+    position: 'absolute',
+    pointerEvents: 'none',
+    left: '8%',
+    right: '8%',
+    bottom: '24%',
+    borderTopWidth: 1,
+  },
+  baselineMark: {
+    position: 'absolute',
+    left: -2,
+    top: -30,
+    fontFamily: FontFamily.body,
+    fontSize: 22,
+    lineHeight: 26,
   },
   preview: {
     width: '100%',
@@ -239,14 +271,15 @@ const styles = StyleSheet.create({
     gap: Spacing.two,
   },
   modalTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '700',
+    fontFamily: FontFamily.display,
+    fontSize: 26,
+    lineHeight: 30,
+    textTransform: 'uppercase',
   },
   clear: {
+    fontFamily: FontFamily.bodyBold,
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: '700',
     paddingHorizontal: Spacing.two,
     paddingVertical: Spacing.one,
   },
@@ -266,14 +299,16 @@ const styles = StyleSheet.create({
   },
   canvasHint: {
     position: 'absolute',
+    pointerEvents: 'none',
     // Spanning the full width, not shrink-wrapped: ThemedText carries a
     // flexShrink that was clipping this to "Signer avec le".
     left: 0,
     right: 0,
+    top: '30%',
     textAlign: 'center',
+    fontFamily: FontFamily.body,
     fontSize: 15,
     lineHeight: 22,
-    fontStyle: 'italic',
   },
   modalActions: {
     flexDirection: 'row',

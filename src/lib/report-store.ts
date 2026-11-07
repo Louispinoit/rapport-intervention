@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 import type { ReportDraft } from '@/lib/report';
+import { normalizeReportDraft } from '@/lib/report-defaults';
 
 type ReportRow = {
   id: string;
@@ -196,5 +197,5 @@ export async function loadReportDraft(id: string) {
     return null;
   }
 
-  return JSON.parse(row.data) as ReportDraft;
+  return normalizeReportDraft(JSON.parse(row.data) as Partial<ReportDraft>);
 }

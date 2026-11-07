@@ -1,27 +1,25 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  StyleSheet,
-  useWindowDimensions,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { Easing, FadeInDown, Keyframe, useReducedMotion } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { CheckRow } from '@/components/ui/check-row';
+import { FormSection, GroupLabel } from '@/components/ui/form-section';
+import { CheckIcon, DownloadIcon, ExternalIcon, LockIcon } from '@/components/ui/icons';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { SectionCard } from '@/components/ui/section-card';
-import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { SkeletonRows } from '@/components/ui/skeleton';
+import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { successHaptic } from '@/lib/haptics';
 import {
   chooseSaveDirectory,
   customerFullName,
+  parseInterventionDate,
   saveReportPdf,
   SIGNATURE_BOX,
   type ReportDraft,
@@ -31,20 +29,35 @@ import { loadReportDraft } from '@/lib/report-store';
 /** Abby's web app, which unlike its native app can attach a file to an invoice. */
 const ABBY_URL = 'https://my.app-abby.com';
 
-function SectionHeader({ number, title, compact }: { number: string; title: string; compact: boolean }) {
-  const theme = useTheme();
+const dayLong = new Intl.DateTimeFormat('fr-FR', {
+  weekday: 'long',
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+});
 
-  return (
-    <View style={styles.sectionHeader}>
-      <View style={[styles.sectionNumberBadge, { backgroundColor: theme.accentSoft }]}>
-        <ThemedText style={[styles.sectionNumber, { color: theme.accent }]}>{number}</ThemedText>
-      </View>
-      <ThemedText style={[styles.sectionTitle, compact && styles.sectionTitleCompact]}>
-        {title}
-      </ThemedText>
-    </View>
-  );
-}
+const STAMP_DURATION = 420;
+/** The moment the stamp meets the paper, as a share of the animation. */
+const STAMP_IMPACT = 0.62;
+
+/**
+ * Played once, right after saving: the stamp drops onto the page, lands a touch
+ * flat and settles at its tilt. It accelerates into the paper (a falling object)
+ * and eases out of the impact, so the haptic can fire on contact.
+ */
+const stampLanding = new Keyframe({
+  0: { opacity: 0, transform: [{ scale: 1.9 }, { rotate: '-10deg' }] },
+  [STAMP_IMPACT * 100]: {
+    opacity: 1,
+    transform: [{ scale: 0.94 }, { rotate: '-1deg' }],
+    easing: Easing.in(Easing.quad),
+  },
+  100: {
+    opacity: 1,
+    transform: [{ scale: 1 }, { rotate: '-2deg' }],
+    easing: Easing.bezier(0.23, 1, 0.32, 1),
+  },
+}).duration(STAMP_DURATION);
 
 /** Saved reports show what was ticked, not the options that were left empty. */
 function SelectedList({ title, values }: { title?: string; values: string[] }) {
@@ -52,13 +65,9 @@ function SelectedList({ title, values }: { title?: string; values: string[] }) {
 
   return (
     <View style={styles.group}>
-      {title ? (
-        <ThemedText style={[styles.fieldLabel, { color: theme.textSecondary }]}>{title}</ThemedText>
-      ) : null}
+      {title ? <GroupLabel title={title} /> : null}
       {values.length === 0 ? (
-        <ThemedText themeColor="textSecondary" style={styles.emptyLine}>
-          Rien de coché
-        </ThemedText>
+        <ThemedText style={[styles.emptyLine, { color: theme.textTertiary }]}>Rien de coché</ThemedText>
       ) : (
         <View>
           {values.map((value, index) => (
@@ -71,9 +80,11 @@ function SelectedList({ title, values }: { title?: string; values: string[] }) {
 }
 
 export default function SavedReportScreen() {
-  const params = useLocalSearchParams<{ id?: string; exported?: string }>();
+  const params = useLocalSearchParams<{ id?: string; exported?: string; saved?: string }>();
+  const reducedMotion = useReducedMotion();
+  const justSaved = params.saved === '1';
   const router = useRouter();
-  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const theme = useTheme();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -81,8 +92,6 @@ export default function SavedReportScreen() {
   // Shown on arrival from an export, so it survives the Android share sheet
   // instead of firing while the user is still in another app.
   const [invoicePrompt, setInvoicePrompt] = useState(params.exported === '1');
-  const isCompact = width < 430;
-  const horizontalPadding = isCompact ? Spacing.three : Spacing.four;
 
   useEffect(() => {
     let cancelled = false;
@@ -108,6 +117,16 @@ export default function SavedReportScreen() {
     };
   }, [params.id]);
 
+  // The confirmation buzz lands with the stamp, not when the button was pressed.
+  useEffect(() => {
+    if (!justSaved || loading || !report) {
+      return;
+    }
+
+    const timer = setTimeout(successHaptic, reducedMotion ? 0 : STAMP_DURATION * STAMP_IMPACT);
+    return () => clearTimeout(timer);
+  }, [justSaved, loading, report, reducedMotion]);
+
   function openAbby() {
     setInvoicePrompt(false);
     WebBrowser.openBrowserAsync(ABBY_URL, {
@@ -130,6 +149,7 @@ export default function SavedReportScreen() {
       const result = await saveReportPdf(report);
 
       if (result.status === 'saved') {
+        successHaptic();
         Alert.alert('Rapport enregistré', `${result.name} a été écrit dans ton dossier.`, [
           { text: 'Terminé', style: 'cancel' },
           { text: 'Changer de dossier', onPress: () => chooseSaveDirectory() },
@@ -145,311 +165,329 @@ export default function SavedReportScreen() {
 
   if (loading) {
     return (
-      <ThemedView style={styles.screen}>
-        <SafeAreaView style={styles.safeArea}>
-          <SectionCard style={styles.noticeCard}>
-            <ActivityIndicator color={theme.accent} />
-            <ThemedText>Ouverture du rapport…</ThemedText>
-          </SectionCard>
-        </SafeAreaView>
-      </ThemedView>
+      <View style={[styles.screen, styles.padded, { backgroundColor: theme.background }]}>
+        <SectionCard>
+          <SkeletonRows count={2} />
+        </SectionCard>
+      </View>
     );
   }
 
   if (!report) {
     return (
-      <ThemedView style={styles.screen}>
-        <SafeAreaView style={styles.safeArea}>
-          <SectionCard style={styles.missingCard}>
-            <ThemedText style={styles.missingTitle}>Rapport introuvable</ThemedText>
-            <ThemedText themeColor="textSecondary">
-              Ce rapport n&apos;est plus enregistré sur cet appareil.
-            </ThemedText>
-            <PrimaryButton
-              onPress={() => router.replace('/history')}
-              style={styles.fullWidth}
-              title="Revenir aux rapports"
-            />
-          </SectionCard>
-        </SafeAreaView>
-      </ThemedView>
+      <View style={[styles.screen, styles.padded, { backgroundColor: theme.background }]}>
+        <SectionCard style={styles.missingCard}>
+          <ThemedText type="heading">Rapport introuvable</ThemedText>
+          <ThemedText style={[styles.body, { color: theme.textSecondary }]}>
+            Ce rapport n&apos;est plus enregistré sur cet appareil.
+          </ThemedText>
+          <PrimaryButton
+            onPress={() => router.replace('/history')}
+            style={styles.fullWidth}
+            title="Revenir à l’historique"
+          />
+        </SectionCard>
+      </View>
     );
   }
 
-  return (
-    <ThemedView style={styles.screen}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}>
+  const parsedDate = parseInterventionDate(report.interventionDate);
+  const dateLine = parsedDate
+    ? dayLong.format(parsedDate)
+    : report.interventionDate || 'Date non renseignée';
+  const customer = customerFullName(report);
 
-          {invoicePrompt ? (
-            <View
-              style={[
-                styles.promptCard,
-                { backgroundColor: theme.accentSoft, borderColor: theme.accent },
-              ]}>
-              <ThemedText style={[styles.promptTitle, { color: theme.accent }]}>
+  return (
+    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      <ScrollView contentContainerStyle={styles.content} style={styles.scroll}>
+        {invoicePrompt ? (
+          <Animated.View
+            entering={FadeInDown.duration(260).easing(Easing.bezier(0.23, 1, 0.32, 1))}
+            style={[styles.prompt, { backgroundColor: theme.text }]}>
+            <View style={styles.promptHead}>
+              <View style={[styles.promptCheck, { backgroundColor: theme.accent }]}>
+                <CheckIcon color={theme.accentForeground} size={16} />
+              </View>
+              <ThemedText style={[styles.promptTitle, { color: theme.background }]}>
                 PDF enregistré
               </ThemedText>
-              <ThemedText style={styles.promptText}>
-                Il reste à créer la facture correspondante dans Abby.
-              </ThemedText>
-              <View style={styles.promptActions}>
-                <PrimaryButton onPress={openAbby} style={styles.promptButton} title="Ouvrir Abby" />
-                <PrimaryButton
-                  onPress={() => setInvoicePrompt(false)}
-                  style={styles.promptButton}
-                  title="Plus tard"
-                  variant="secondary"
-                />
-              </View>
             </View>
-          ) : null}
-
-          <SectionCard style={styles.headerCard}>
-            <View style={[styles.lockBadge, { backgroundColor: theme.accentSoft }]}>
-              <ThemedText style={[styles.lockText, { color: theme.accent }]}>
-                Rapport enregistré · lecture seule
-              </ThemedText>
+            <ThemedText style={[styles.promptText, { color: theme.background }]}>
+              Il reste à créer la facture correspondante dans Abby.
+            </ThemedText>
+            <View style={styles.promptActions}>
+              <PrimaryButton
+                icon={(color) => <ExternalIcon color={color} size={18} />}
+                onPress={openAbby}
+                style={styles.promptPrimary}
+                title="Ouvrir Abby"
+              />
+              <PrimaryButton
+                onPress={() => setInvoicePrompt(false)}
+                style={styles.promptLater}
+                title="Plus tard"
+                variant="secondary"
+              />
             </View>
-            <ThemedText style={[styles.headerTitle, isCompact && styles.headerTitleCompact]}>
-              {customerFullName(report) || 'Client non renseigné'}
-            </ThemedText>
-            <ThemedText themeColor="textSecondary" style={styles.headerDate}>
-              Intervention du {report.interventionDate || 'jour non renseigné'}
-            </ThemedText>
-          </SectionCard>
+          </Animated.View>
+        ) : null}
 
-          <SectionCard>
-            <SectionHeader number="01" title="Prestation demandée par le client" compact={isCompact} />
-            <SelectedList values={report.services} />
-          </SectionCard>
+        {/* Document head: who, when, and the stamp that says it is final. */}
+        <View style={styles.docHead}>
+          <Animated.View
+            entering={justSaved ? stampLanding : undefined}
+            style={[styles.stamp, { borderColor: theme.accent }]}>
+            <LockIcon color={theme.accent} size={13} />
+            <ThemedText style={[styles.stampText, { color: theme.accent }]}>Enregistré</ThemedText>
+          </Animated.View>
+          <ThemedText
+            selectable
+            style={[styles.customer, !customer && { color: theme.textSecondary }]}>
+            {customer || 'Client non renseigné'}
+          </ThemedText>
+          <ThemedText style={[styles.date, { color: theme.textSecondary }]}>
+            Intervention du {dateLine}
+          </ThemedText>
+        </View>
 
-          <SectionCard>
-            <SectionHeader number="02" title="Rapport d'intervention" compact={isCompact} />
-            <SelectedList title="Types de suies" values={report.sootTypes} />
-            <SelectedList title="Volume des suies" values={report.sootVolume ? [report.sootVolume] : []} />
-            <SelectedList title="Défauts apparents" values={report.visibleDefects} />
-          </SectionCard>
+        <FormSection number="01" title="Prestation demandée">
+          <SelectedList values={report.services} />
+        </FormSection>
 
-          <SectionCard>
-            <SectionHeader number="03" title="Conseils" compact={isCompact} />
-            <SelectedList values={report.advice} />
-          </SectionCard>
+        <FormSection number="02" title="Rapport d’intervention">
+          <SelectedList title="Types de suies" values={report.sootTypes} />
+          <SelectedList
+            title="Volume des suies"
+            values={report.sootVolume ? [report.sootVolume] : []}
+          />
+          <SelectedList title="Défauts apparents" values={report.visibleDefects} />
+        </FormSection>
 
-          <SectionCard>
-            <SectionHeader number="04" title="Autres observations" compact={isCompact} />
-            <ThemedText
-              themeColor={report.observations ? 'text' : 'textSecondary'}
-              style={styles.observations}>
-              {report.observations || 'Aucune observation complémentaire'}
-            </ThemedText>
-          </SectionCard>
+        <FormSection number="03" title="Conseils">
+          <SelectedList values={report.advice} />
+        </FormSection>
 
-          <SectionCard>
-            <SectionHeader number="05" title="Signature" compact={isCompact} />
-            {report.signature.length ? (
-              <View style={[styles.signatureBox, { borderColor: theme.backgroundSelected }]}>
-                <Svg
-                  height="100%"
-                  viewBox={`0 0 ${SIGNATURE_BOX.width} ${SIGNATURE_BOX.height}`}
-                  width="100%">
-                  {report.signature.map((stroke, index) => (
-                    <Path
-                      d={stroke}
-                      key={index}
-                      stroke={theme.text}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={3}
-                      fill="none"
-                    />
-                  ))}
-                </Svg>
-              </View>
-            ) : (
-              <ThemedText themeColor="textSecondary" style={styles.emptyLine}>
-                Non signé
-              </ThemedText>
-            )}
-          </SectionCard>
+        <FormSection number="04" title="Autres observations">
+          <ThemedText
+            selectable
+            style={[
+              styles.body,
+              { color: report.observations ? theme.text : theme.textTertiary },
+            ]}>
+            {report.observations || 'Aucune observation complémentaire'}
+          </ThemedText>
+        </FormSection>
 
-          <SectionCard style={styles.actionsCard}>
-            <PrimaryButton
-              disabled={saving}
-              onPress={handleSaveToFiles}
-              style={styles.fullWidth}
-              title={saving ? 'Enregistrement…' : 'Enregistrer dans mes fichiers'}
-            />
-            <PrimaryButton
-              onPress={openAbby}
-              style={styles.fullWidth}
-              title="Ouvrir Abby"
-              variant="secondary"
-            />
-            <ThemedText themeColor="textSecondary" style={styles.actionsNote}>
-              Le PDF enregistré s&apos;efface de tes fichiers au bout d&apos;une semaine. Le rapport,
-              lui, reste ici : tu peux le réenregistrer à tout moment.
-            </ThemedText>
-          </SectionCard>
+        <FormSection number="05" title="Signature du client">
+          {report.signature.length ? (
+            <View
+              style={[
+                styles.signatureBox,
+                { backgroundColor: theme.background, borderColor: theme.line },
+              ]}>
+              <Svg
+                height="100%"
+                viewBox={`0 0 ${SIGNATURE_BOX.width} ${SIGNATURE_BOX.height}`}
+                width="100%">
+                {report.signature.map((stroke, index) => (
+                  <Path
+                    d={stroke}
+                    fill="none"
+                    key={index}
+                    stroke={theme.text}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                  />
+                ))}
+              </Svg>
+            </View>
+          ) : (
+            <ThemedText style={[styles.emptyLine, { color: theme.textTertiary }]}>Non signé</ThemedText>
+          )}
+        </FormSection>
 
-        </ScrollView>
-      </SafeAreaView>
-    </ThemedView>
+        <ThemedText style={[styles.note, { color: theme.textSecondary }]}>
+          Le PDF enregistré s&apos;efface de tes fichiers au bout d&apos;une semaine. Le rapport,
+          lui, reste ici : tu peux le réenregistrer à tout moment.
+        </ThemedText>
+      </ScrollView>
+
+      <View
+        style={[
+          styles.bar,
+          {
+            backgroundColor: theme.background,
+            borderTopColor: theme.line,
+            paddingBottom: Math.max(insets.bottom, 12),
+          },
+        ]}>
+        <View style={styles.barInner}>
+          <PrimaryButton
+            accessibilityLabel="Ouvrir Abby pour la facture"
+            onPress={openAbby}
+            style={styles.barSecondary}
+            title="Abby"
+            variant="secondary"
+          />
+          <PrimaryButton
+            accessibilityLabel="Enregistrer le PDF dans mes fichiers"
+            icon={(color) => <DownloadIcon color={color} size={19} />}
+            loading={saving}
+            onPress={handleSaveToFiles}
+            style={styles.barPrimary}
+            title="PDF dans mes fichiers"
+          />
+        </View>
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    flexDirection: 'row',
   },
-  safeArea: {
-    flex: 1,
-    alignItems: 'stretch',
+  padded: {
+    paddingHorizontal: 14,
+    paddingTop: Spacing.two,
   },
-  scrollView: {
+  scroll: {
     flex: 1,
-    alignSelf: 'stretch',
   },
   content: {
     width: '100%',
-    alignSelf: 'center',
     maxWidth: MaxContentWidth,
-    gap: Spacing.two,
-    paddingTop: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.five,
-  },
-  noticeCard: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: Spacing.three,
-    justifyContent: 'center',
-    marginHorizontal: Spacing.four,
-    marginTop: Spacing.four,
+    alignSelf: 'center',
+    gap: 28,
+    paddingHorizontal: 14,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.five,
   },
   missingCard: {
-    marginHorizontal: Spacing.four,
-    marginTop: Spacing.four,
+    gap: Spacing.three,
   },
-  missingTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '700',
+  body: {
+    fontFamily: FontFamily.body,
+    fontSize: 16,
+    lineHeight: 24,
   },
-  promptCard: {
-    borderWidth: 1,
+  prompt: {
     borderRadius: Radius.lg,
-    gap: Spacing.two,
-    padding: 20,
+    gap: 10,
+    padding: 18,
+  },
+  promptHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  promptCheck: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   promptTitle: {
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '700',
+    fontFamily: FontFamily.display,
+    fontSize: 22,
+    lineHeight: 26,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
   promptText: {
-    fontSize: 16,
-    lineHeight: 23,
+    fontFamily: FontFamily.body,
+    fontSize: 15,
+    lineHeight: 22,
+    opacity: 0.85,
   },
   promptActions: {
     flexDirection: 'row',
-    gap: Spacing.two,
+    gap: 10,
+    marginTop: Spacing.one,
   },
-  promptButton: {
+  promptPrimary: {
     flex: 1,
   },
-  headerCard: {
-    gap: Spacing.two,
+  promptLater: {
+    paddingHorizontal: 18,
   },
-  lockBadge: {
+  docHead: {
+    gap: 6,
+    paddingHorizontal: Spacing.one,
+    paddingTop: Spacing.two,
+  },
+  stamp: {
     alignSelf: 'flex-start',
-    borderRadius: Radius.sm,
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.half + 2,
-  },
-  lockText: {
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-  },
-  headerTitle: {
-    fontSize: 24,
-    lineHeight: 30,
-    fontWeight: '700',
-  },
-  headerDate: {
-    fontSize: 15,
-    lineHeight: 22,
-  },
-  signatureBox: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: Radius.md,
-    height: 140,
-  },
-  headerTitleCompact: {
-    fontSize: 20,
-    lineHeight: 26,
-  },
-  sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
-  },
-  sectionNumberBadge: {
-    width: 28,
-    height: 28,
+    gap: 6,
+    borderWidth: 1.5,
     borderRadius: Radius.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    marginBottom: Spacing.two,
+    transform: [{ rotate: '-2deg' }],
   },
-  sectionNumber: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '700',
-    flex: 1,
-  },
-  sectionTitleCompact: {
-    fontSize: 18,
-    lineHeight: 24,
-  },
-  group: {
-    gap: Spacing.one,
-  },
-  fieldLabel: {
-    fontSize: 12,
+  stampText: {
+    fontFamily: FontFamily.display,
+    fontSize: 14,
     lineHeight: 18,
-    fontWeight: '700',
+    letterSpacing: 1.6,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
   },
-  emptyLine: {
+  customer: {
+    fontFamily: FontFamily.displayHeavy,
+    fontSize: 40,
+    lineHeight: 40,
+    letterSpacing: -0.4,
+    textTransform: 'uppercase',
+  },
+  date: {
+    fontFamily: FontFamily.bodyMedium,
     fontSize: 15,
     lineHeight: 22,
-    fontStyle: 'italic',
+  },
+  group: {
+    gap: 2,
+  },
+  emptyLine: {
+    fontFamily: FontFamily.body,
+    fontSize: 15,
+    lineHeight: 22,
     paddingVertical: Spacing.one,
+    paddingHorizontal: Spacing.one,
   },
-  observations: {
-    fontSize: 16,
-    lineHeight: 24,
+  signatureBox: {
+    width: '100%',
+    aspectRatio: SIGNATURE_BOX.width / SIGNATURE_BOX.height,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: Radius.md,
   },
-  actionsNote: {
+  note: {
+    fontFamily: FontFamily.body,
     fontSize: 13,
     lineHeight: 19,
+    paddingHorizontal: Spacing.one,
+    textAlign: 'center',
   },
-  actionsCard: {
-    marginTop: Spacing.two,
+  bar: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+    paddingHorizontal: 14,
+  },
+  barInner: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  barSecondary: {
+    paddingHorizontal: 22,
+  },
+  barPrimary: {
+    flex: 1,
   },
   fullWidth: {
     width: '100%',

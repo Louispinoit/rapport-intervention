@@ -2,33 +2,31 @@ import { useIsFocused } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
+  SectionList,
   StyleSheet,
   TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import { CloseIcon, PlusIcon, SearchIcon } from '@/components/ui/icons';
+import { PressableScale } from '@/components/ui/pressable-scale';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { ReportRow } from '@/components/ui/report-row';
 import { SectionCard } from '@/components/ui/section-card';
-import { BottomTabInset, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
+import { SkeletonRows } from '@/components/ui/skeleton';
+import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import {
-  customerFullName,
-  normalizeForSearch,
-  reportDate,
-  type ReportSummary,
-} from '@/lib/report';
+import { customerFullName, normalizeForSearch, reportDate, type ReportSummary } from '@/lib/report';
 import { deleteReportDraft, listReportDrafts } from '@/lib/report-store';
 
-const monthFormatter = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
+const monthFormatter = new Intl.DateTimeFormat('fr-FR', {
+  month: 'long',
+  year: 'numeric',
+});
 
 type MonthGroup = {
   key: string;
@@ -47,7 +45,11 @@ function groupByMonth(reports: ReportSummary[]): MonthGroup[] {
     if (group) {
       group.reports.push(report);
     } else {
-      groups.set(key, { key, label: monthFormatter.format(date), reports: [report] });
+      groups.set(key, {
+        key,
+        label: monthFormatter.format(date),
+        reports: [report],
+      });
     }
   }
 
@@ -91,37 +93,33 @@ function FilterChip({
   const theme = useTheme();
 
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [
+      style={[
         styles.chip,
         {
-          backgroundColor: selected ? theme.accent : theme.backgroundElement,
-          borderColor: selected ? theme.accent : theme.backgroundSelected,
-          opacity: pressed ? 0.72 : 1,
+          backgroundColor: selected ? theme.text : theme.backgroundElement,
+          borderColor: selected ? theme.text : theme.line,
         },
       ]}>
-      <ThemedText
-        style={[styles.chipLabel, { color: selected ? theme.accentForeground : theme.text }]}>
+      <ThemedText style={[styles.chipLabel, { color: selected ? theme.background : theme.text }]}>
         {label}
       </ThemedText>
-    </Pressable>
+    </PressableScale>
   );
 }
 
 export default function HistoryScreen() {
   const router = useRouter();
   const isFocused = useIsFocused();
-  const { width } = useWindowDimensions();
   const theme = useTheme();
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState<number | null>(null);
   const [query, setQuery] = useState('');
-  const isCompact = width < 430;
-  const horizontalPadding = isCompact ? Spacing.three : Spacing.four;
+  const [searchFocused, setSearchFocused] = useState(false);
 
   useEffect(() => {
     if (!isFocused) {
@@ -184,53 +182,83 @@ export default function HistoryScreen() {
     [query, selectedYear, sortedReports]
   );
 
-  const groups = useMemo(() => groupByMonth(visibleReports), [visibleReports]);
+  const sections = useMemo(
+    () =>
+      groupByMonth(visibleReports).map((group) => ({
+        key: group.key,
+        label: group.label,
+        data: group.reports,
+      })),
+    [visibleReports]
+  );
 
   return (
-    <ThemedView style={styles.screen}>
-      <SafeAreaView style={styles.safeArea}>
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={[styles.content, { paddingHorizontal: horizontalPadding }]}>
-
-          <ThemedText themeColor="textSecondary" style={styles.lead}>
-            Les rapports enregistrés se consultent et s&apos;exportent, ils ne se modifient plus.
-          </ThemedText>
-
+    <View style={[styles.screen, { backgroundColor: theme.background }]}>
+      {loading || sortedReports.length === 0 ? (
+        <View style={styles.content}>
           {loading ? (
-            <SectionCard style={styles.noticeCard}>
-              <ActivityIndicator color={theme.accent} />
-              <ThemedText>Chargement des rapports…</ThemedText>
-            </SectionCard>
-          ) : sortedReports.length === 0 ? (
             <SectionCard>
-              <ThemedText style={styles.emptyTitle}>Aucun rapport enregistré</ThemedText>
-              <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-                Saisis une intervention puis enregistre-la pour la retrouver ici.
+              <SkeletonRows count={4} />
+            </SectionCard>
+          ) : (
+            <SectionCard style={styles.emptyCard}>
+              <ThemedText type="heading">Aucun rapport enregistré</ThemedText>
+              <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                Saisis une intervention puis enregistre-la : elle se retrouve ici, classée par mois.
+                Les rapports se consultent et s’exportent, ils ne se modifient plus.
               </ThemedText>
               <PrimaryButton
+                icon={(color) => <PlusIcon color={color} size={20} />}
                 onPress={() => router.push('/report/new')}
                 style={styles.fullWidth}
                 title="Nouveau rapport"
               />
             </SectionCard>
-          ) : (
-            <>
+          )}
+        </View>
+      ) : (
+        // Virtualised: years of reports stay smooth, only the rows on screen are
+        // drawn. Month titles stick to the top while their reports scroll by.
+        <SectionList
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+          keyExtractor={(report) => report.id}
+          ListEmptyComponent={
+            <SectionCard style={[styles.emptyCard, styles.emptyResults]}>
+              <ThemedText type="heading">Aucun résultat</ThemedText>
+              <ThemedText style={[styles.emptyText, { color: theme.textSecondary }]}>
+                Rien ne correspond à cette recherche. Essaie le nom seul, ou un mois comme « juillet
+                ».
+              </ThemedText>
+            </SectionCard>
+          }
+          ListFooterComponent={
+            visibleReports.length > 0 ? (
+              <ThemedText style={[styles.hint, { color: theme.textTertiary }]}>
+                Glisse un rapport vers la gauche pour le supprimer.
+              </ThemedText>
+            ) : null
+          }
+          ListHeaderComponent={
+            <View style={styles.listHeader}>
               <View
                 style={[
                   styles.search,
                   {
                     backgroundColor: theme.backgroundElement,
-                    borderColor: theme.backgroundSelected,
+                    borderColor: searchFocused ? theme.accent : theme.line,
                   },
                 ]}>
+                <SearchIcon color={searchFocused ? theme.accent : theme.textTertiary} size={20} />
                 <TextInput
                   accessibilityLabel="Rechercher un rapport par client ou par date"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  onBlur={() => setSearchFocused(false)}
                   onChangeText={setQuery}
-                  placeholder="Nom du client ou date"
-                  placeholderTextColor={theme.textSecondary}
+                  onFocus={() => setSearchFocused(true)}
+                  placeholder="Client, date ou mois"
+                  placeholderTextColor={theme.textTertiary}
                   returnKeyType="search"
                   selectionColor={theme.accent}
                   style={[styles.searchInput, { color: theme.text }]}
@@ -240,23 +268,22 @@ export default function HistoryScreen() {
                   <Pressable
                     accessibilityLabel="Effacer la recherche"
                     accessibilityRole="button"
-                    hitSlop={8}
+                    hitSlop={10}
                     onPress={() => setQuery('')}
-                    style={styles.searchClear}>
-                    <ThemedText style={[styles.searchClearText, { color: theme.textSecondary }]}>
-                      ✕
-                    </ThemedText>
+                    style={[styles.searchClear, { backgroundColor: theme.backgroundSelected }]}>
+                    <CloseIcon color={theme.textSecondary} size={14} />
                   </Pressable>
                 ) : null}
               </View>
 
               {years.length > 1 ? (
                 <ScrollView
+                  contentContainerStyle={styles.filterRow}
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterRow}>
+                  style={styles.filterScroll}>
                   <FilterChip
-                    label="Toutes les années"
+                    label="Toutes"
                     onPress={() => setSelectedYear(null)}
                     selected={selectedYear === null}
                   />
@@ -270,146 +297,180 @@ export default function HistoryScreen() {
                   ))}
                 </ScrollView>
               ) : null}
+            </View>
+          }
+          renderItem={({ item, index, section }) => {
+            const first = index === 0;
+            const last = index === section.data.length - 1;
 
-              <ThemedText themeColor="textSecondary" style={styles.count}>
-                {visibleReports.length} rapport{visibleReports.length > 1 ? 's' : ''}
+            // Rows of one month read as a single sheet: the first rounds the top,
+            // the last rounds the bottom.
+            return (
+              <View
+                style={[
+                  styles.sheetRow,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    borderColor: theme.line,
+                  },
+                  first && styles.sheetFirst,
+                  last && styles.sheetLast,
+                ]}>
+                <ReportRow
+                  onDelete={() => removeReport(item.id)}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/report/[id]',
+                      params: { id: item.id },
+                    })
+                  }
+                  report={item}
+                  showDivider={!first}
+                />
+              </View>
+            );
+          }}
+          renderSectionHeader={({ section }) => (
+            <View style={[styles.monthHeader, { backgroundColor: theme.background }]}>
+              <ThemedText style={styles.monthLabel}>{section.label}</ThemedText>
+              <ThemedText style={[styles.monthCount, { color: theme.textTertiary }]}>
+                {section.data.length} rapport
+                {section.data.length > 1 ? 's' : ''}
               </ThemedText>
-
-              {visibleReports.length === 0 ? (
-                <SectionCard>
-                  <ThemedText style={styles.emptyTitle}>Aucun résultat</ThemedText>
-                  <ThemedText themeColor="textSecondary" style={styles.emptyText}>
-                    Aucun rapport ne correspond à cette recherche.
-                  </ThemedText>
-                </SectionCard>
-              ) : (
-                groups.map((group) => (
-                  <View key={group.key} style={styles.group}>
-                    <ThemedText style={[styles.monthLabel, { color: theme.textSecondary }]}>
-                      {group.label}
-                    </ThemedText>
-                    <SectionCard>
-                      <View>
-                        {group.reports.map((report, index) => (
-                          <ReportRow
-                            key={report.id}
-                            onDelete={() => removeReport(report.id)}
-                            onPress={() =>
-                              router.push({ pathname: '/report/[id]', params: { id: report.id } })
-                            }
-                            report={report}
-                            showDivider={index > 0}
-                          />
-                        ))}
-                      </View>
-                    </SectionCard>
-                  </View>
-                ))
-              )}
-            </>
+            </View>
           )}
-        </ScrollView>
-      </SafeAreaView>
-    </ThemedView>
+          sections={sections}
+          stickySectionHeadersEnabled
+          style={styles.scroll}
+        />
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    flexDirection: 'row',
   },
-  safeArea: {
+  scroll: {
     flex: 1,
-    alignItems: 'stretch',
-  },
-  scrollView: {
-    flex: 1,
-    alignSelf: 'stretch',
   },
   content: {
     width: '100%',
-    alignSelf: 'center',
     maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingTop: Spacing.two,
+  },
+  listContent: {
+    width: '100%',
+    maxWidth: MaxContentWidth,
+    alignSelf: 'center',
+    paddingHorizontal: 14,
+    paddingBottom: Spacing.six,
+  },
+  listHeader: {
     gap: Spacing.three,
-    paddingTop: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.five,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.one,
   },
-  lead: {
-    fontSize: 15,
-    lineHeight: 22,
-    paddingHorizontal: Spacing.half,
+  emptyResults: {
+    marginTop: Spacing.three,
   },
-  noticeCard: {
-    alignItems: 'center',
-    flexDirection: 'row',
+  sheetRow: {
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 14,
+    overflow: 'hidden',
+  },
+  sheetFirst: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopLeftRadius: Radius.lg,
+    borderTopRightRadius: Radius.lg,
+    paddingTop: 4,
+  },
+  sheetLast: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomLeftRadius: Radius.lg,
+    borderBottomRightRadius: Radius.lg,
+    paddingBottom: 4,
+  },
+  emptyCard: {
     gap: Spacing.three,
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontWeight: '700',
   },
   emptyText: {
-    fontSize: 16,
-    lineHeight: 24,
+    fontFamily: FontFamily.body,
+    fontSize: 15,
+    lineHeight: 22,
   },
   search: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 10,
     borderWidth: 1,
-    borderRadius: Radius.md,
-    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.pill,
+    paddingLeft: 18,
+    paddingRight: 10,
   },
   searchInput: {
     flex: 1,
-    minHeight: 52,
+    minHeight: 54,
+    fontFamily: FontFamily.bodyMedium,
     fontSize: 16,
-    lineHeight: 24,
   },
   searchClear: {
-    paddingHorizontal: Spacing.two,
-    paddingVertical: Spacing.one,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  searchClearText: {
-    fontSize: 16,
-    lineHeight: 22,
-    fontWeight: '700',
+  filterScroll: {
+    marginHorizontal: -14,
   },
   filterRow: {
     flexDirection: 'row',
     gap: Spacing.two,
-    paddingHorizontal: Spacing.half,
-    paddingVertical: Spacing.half,
+    paddingHorizontal: 14,
   },
   chip: {
     borderWidth: 1,
-    borderRadius: Radius.xl,
+    borderRadius: Radius.pill,
     justifyContent: 'center',
-    minHeight: 40,
-    paddingHorizontal: Spacing.three,
+    // 48dp: Material's minimum touch target.
+    minHeight: 48,
+    paddingHorizontal: 18,
   },
   chipLabel: {
+    fontFamily: FontFamily.bodySemibold,
     fontSize: 14,
     lineHeight: 20,
-    fontWeight: '700',
   },
-  count: {
-    fontSize: 13,
-    lineHeight: 18,
-    paddingHorizontal: Spacing.half,
-  },
-  group: {
-    gap: Spacing.one,
+  monthHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.one,
+    paddingTop: Spacing.four,
+    paddingBottom: 10,
   },
   monthLabel: {
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '700',
+    fontFamily: FontFamily.display,
+    fontSize: 22,
+    lineHeight: 26,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: Spacing.half,
+  },
+  monthCount: {
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  hint: {
+    marginTop: Spacing.three,
+    fontFamily: FontFamily.body,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   fullWidth: {
     width: '100%',
