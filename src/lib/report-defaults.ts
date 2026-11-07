@@ -17,6 +17,8 @@ export function createEmptyReport(): ReportDraft {
     interventionDate: todayAsFrenchDate(),
     customerLastName: '',
     customerFirstName: '',
+    customerAddress: '',
+    customerPhone: '',
     services: [],
     sootTypes: [],
     sootVolume: '',
@@ -24,6 +26,7 @@ export function createEmptyReport(): ReportDraft {
     advice: [],
     observations: '',
     signature: [],
+    photos: [],
   };
 }
 

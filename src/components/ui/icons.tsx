@@ -108,6 +108,43 @@ export function LockIcon({ color, size = 14, strokeWidth = 1.8 }: IconProps) {
   );
 }
 
+export function PhoneIcon({ color, size = 20, strokeWidth = 1.7 }: IconProps) {
+  return (
+    <Svg height={size} viewBox="0 0 24 24" width={size}>
+      <Path
+        d="M6.5 3.5h3l1.5 4-2 1.3a11 11 0 006.2 6.2l1.3-2 4 1.5v3a2 2 0 01-2.2 2A17 17 0 014.5 5.7a2 2 0 012-2.2z"
+        {...stroke(color, strokeWidth)}
+      />
+    </Svg>
+  );
+}
+
+export function PinIcon({ color, size = 20, strokeWidth = 1.7 }: IconProps) {
+  return (
+    <Svg height={size} viewBox="0 0 24 24" width={size}>
+      <Path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0113 0c0 5.4-6.5 11-6.5 11z" {...stroke(color, strokeWidth)} />
+      <Circle cx={12} cy={10} r={2.3} {...stroke(color, strokeWidth)} />
+    </Svg>
+  );
+}
+
+export function RepeatIcon({ color, size = 20, strokeWidth = 1.8 }: IconProps) {
+  return (
+    <Svg height={size} viewBox="0 0 24 24" width={size}>
+      <Path d="M4 11a8 8 0 0113.7-5.6L20 7.5M20 3.5v4h-4M20 13a8 8 0 01-13.7 5.6L4 16.5M4 20.5v-4h4" {...stroke(color, strokeWidth)} />
+    </Svg>
+  );
+}
+
+export function ArchiveIcon({ color, size = 20, strokeWidth = 1.7 }: IconProps) {
+  return (
+    <Svg height={size} viewBox="0 0 24 24" width={size}>
+      <Rect height={4} rx={1} width={18} x={3} y={4} {...stroke(color, strokeWidth)} />
+      <Path d="M5 8v10.5A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5V8M10 12h4" {...stroke(color, strokeWidth)} />
+    </Svg>
+  );
+}
+
 /**
  * The DSSV mark from the app icon: a roof, the chimney, and the sweep's brush
  * coming out of it. Drawn in vectors so it stays sharp at any size.

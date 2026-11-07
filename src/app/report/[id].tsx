@@ -1,7 +1,7 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated, { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -9,7 +9,17 @@ import Svg, { Path } from 'react-native-svg';
 import { ThemedText } from '@/components/themed-text';
 import { CheckRow } from '@/components/ui/check-row';
 import { FormSection, GroupLabel } from '@/components/ui/form-section';
-import { CheckIcon, DownloadIcon, ExternalIcon, LockIcon } from '@/components/ui/icons';
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+  ExternalIcon,
+  LockIcon,
+  PhoneIcon,
+  PinIcon,
+  RepeatIcon,
+} from '@/components/ui/icons';
+import { PhotoField } from '@/components/ui/photo-field';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { SectionCard } from '@/components/ui/section-card';
 import { SkeletonRows } from '@/components/ui/skeleton';
@@ -71,6 +81,40 @@ const promptRise = {
   from: { opacity: 0, transform: [{ translateY: 12 }] },
   to: { opacity: 1, transform: [{ translateY: 0 }] },
 };
+
+/** A tappable contact detail: calls the number, or opens the address in Maps. */
+function ContactLine({
+  icon,
+  value,
+  onPress,
+  label,
+}: {
+  icon: (color: string) => ReactNode;
+  value: string;
+  onPress: () => void;
+  label: string;
+}) {
+  const theme = useTheme();
+
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="link"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.contact,
+        { backgroundColor: pressed ? theme.backgroundSelected : 'transparent' },
+      ]}>
+      <View style={[styles.contactIcon, { backgroundColor: theme.accentSoft }]}>
+        {icon(theme.accent)}
+      </View>
+      <ThemedText numberOfLines={2} selectable style={styles.contactText}>
+        {value}
+      </ThemedText>
+      <ChevronRightIcon color={theme.textTertiary} />
+    </Pressable>
+  );
+}
 
 /** Saved reports show what was ticked, not the options that were left empty. */
 function SelectedList({ title, values }: { title?: string; values: string[] }) {
@@ -279,6 +323,41 @@ export default function SavedReportScreen() {
           <ThemedText style={[styles.date, { color: theme.textSecondary }]}>
             Intervention du {dateLine}
           </ThemedText>
+
+          {report.customerAddress || report.customerPhone ? (
+            <View style={styles.contacts}>
+              {report.customerPhone ? (
+                <ContactLine
+                  icon={(color) => <PhoneIcon color={color} size={18} />}
+                  label={`Appeler ${report.customerPhone}`}
+                  onPress={() => Linking.openURL(`tel:${report.customerPhone.replace(/[^\d+]/g, '')}`)}
+                  value={report.customerPhone}
+                />
+              ) : null}
+              {report.customerAddress ? (
+                <ContactLine
+                  icon={(color) => <PinIcon color={color} size={18} />}
+                  label={`Ouvrir ${report.customerAddress} dans Maps`}
+                  onPress={() =>
+                    Linking.openURL(
+                      `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(report.customerAddress)}`
+                    )
+                  }
+                  value={report.customerAddress}
+                />
+              ) : null}
+            </View>
+          ) : null}
+
+          {customer ? (
+            <PrimaryButton
+              icon={(color) => <RepeatIcon color={color} size={18} />}
+              onPress={() => router.push({ pathname: '/report/new', params: { from: report.id } })}
+              style={styles.again}
+              title="Nouveau rapport pour ce client"
+              variant="secondary"
+            />
+          ) : null}
         </View>
 
         <FormSection number="01" title="Prestation demandée">
@@ -309,7 +388,11 @@ export default function SavedReportScreen() {
           </ThemedText>
         </FormSection>
 
-        <FormSection number="05" title="Signature du client">
+        <FormSection number="05" title="Photos">
+          <PhotoField photos={report.photos} readOnly reportId={report.id} />
+        </FormSection>
+
+        <FormSection number="06" title="Signature du client">
           {report.signature.length ? (
             <View
               style={[
@@ -473,6 +556,35 @@ const styles = StyleSheet.create({
     lineHeight: 40,
     letterSpacing: -0.4,
     textTransform: 'uppercase',
+  },
+  contacts: {
+    marginTop: Spacing.two,
+    marginHorizontal: -Spacing.one,
+  },
+  contact: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 52,
+    paddingHorizontal: Spacing.one,
+    paddingVertical: 6,
+    borderRadius: Radius.md,
+  },
+  contactIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  contactText: {
+    flex: 1,
+    fontFamily: FontFamily.bodyMedium,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  again: {
+    marginTop: Spacing.three,
   },
   date: {
     fontFamily: FontFamily.bodyMedium,

@@ -26,6 +26,8 @@ function summarize(report: ReportDraft): ReportSummary {
     interventionDate: report.interventionDate,
     customerLastName: report.customerLastName,
     customerFirstName: report.customerFirstName,
+    customerAddress: report.customerAddress,
+    customerPhone: report.customerPhone,
     updatedAt: report.updatedAt,
   };
 }
@@ -75,6 +77,10 @@ export async function listReportDrafts() {
 
 export async function deleteReportDraft(id: string) {
   writeWebDrafts(readWebDrafts().filter((item) => item.id !== id));
+}
+
+export async function listAllReportDrafts() {
+  return readWebDrafts();
 }
 
 export async function loadReportDraft(id: string) {

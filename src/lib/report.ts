@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 
 import { COMPANY_NAME } from '@/constants/company';
 import { purgeGeneratedPdfs } from '@/lib/pdf-cache';
+import { photoDataUri } from '@/lib/photos';
 import { getSetting, recordSavedPdf, setSetting } from '@/lib/report-store';
 
 export const serviceOptions = [
@@ -69,6 +70,9 @@ export type ReportDraft = {
   interventionDate: string;
   customerLastName: string;
   customerFirstName: string;
+  /** Where the job was done; printed on the PDF. */
+  customerAddress: string;
+  customerPhone: string;
   services: string[];
   sootTypes: string[];
   sootVolume: string;
@@ -77,13 +81,19 @@ export type ReportDraft = {
   observations: string;
   /** SVG path commands, one per stroke, in the SIGNATURE_BOX coordinate space. */
   signature: string[];
+  /** Photo URIs: app files on the phone, data URIs on web. At most MAX_PHOTOS. */
+  photos: string[];
 };
+
+export const MAX_PHOTOS = 4;
 
 export type ReportSummary = {
   id: string;
   interventionDate: string;
   customerLastName: string;
   customerFirstName: string;
+  customerAddress: string;
+  customerPhone: string;
   updatedAt: string;
 };
 
@@ -165,7 +175,11 @@ function escapeHtml(value: string) {
 const A4_WIDTH = 595;
 const A4_HEIGHT = 842;
 
-export function buildReportHtml(report: ReportDraft) {
+/**
+ * `photos` are data URIs: the print WebView can't open the app's own files.
+ * Callers get them with `reportPhotoDataUris`.
+ */
+export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
   const RED = '#BA1E26';
   const RED_BG = '#FFF5F6';
   const TEXT = '#1A1410';
@@ -223,12 +237,22 @@ export function buildReportHtml(report: ReportDraft) {
       '</td>';
   }
 
+  // Address and phone only appear once filled in, so older reports print as before.
+  const contactRow =
+    report.customerAddress || report.customerPhone
+      ? '<tr><td colspan="2" style="height:8px;"></td></tr><tr>' +
+        identityCell('Adresse de l&#39;intervention', report.customerAddress) +
+        identityCell('T&eacute;l&eacute;phone', report.customerPhone) +
+        '</tr>'
+      : '';
+
   const identity = [
     '<table style="table-layout:fixed;border-collapse:collapse;width:100%;margin-bottom:14px;">',
     '<tr>',
     identityCell('Client', customerFullName(report)),
     identityCell('Date de l&#39;intervention', report.interventionDate),
     '</tr>',
+    contactRow,
     '</table>',
   ].join('');
 
@@ -312,7 +336,9 @@ export function buildReportHtml(report: ReportDraft) {
   const obsStyle = report.observations ? 'normal' : 'italic';
   const observations = [
     inlineLabel('Autres observations'),
-    '<p style="font-size:9px;color:' + obsColor + ';font-style:' + obsStyle + ';min-height:60px;line-height:1.6;">',
+    // Tighter than it used to be (60px), with the signature below, to pay back
+    // the room the address and phone row takes, so the report stays on one sheet.
+    '<p style="font-size:9px;color:' + obsColor + ';font-style:' + obsStyle + ';min-height:40px;line-height:1.6;">',
     report.observations ? escapeHtml(report.observations) : 'Aucune observation compl&eacute;mentaire',
     '</p>',
   ].join('');
@@ -335,7 +361,7 @@ export function buildReportHtml(report: ReportDraft) {
 
   // Only the client signs: Marc is identified by the letterhead and by the invoice.
   const signature = [
-    '<div style="width:52%;margin-top:14px;">',
+    '<div style="width:46%;margin-top:14px;">',
     inlineLabel('Signature du client'),
     signatureBox,
     '<div style="border-top:0.5px solid ' + MUTED + ';padding-top:3px;font-size:7.5px;color:' + MUTED + ';">',
@@ -345,6 +371,24 @@ export function buildReportHtml(report: ReportDraft) {
     '</div>',
     '</div>',
   ].join('');
+
+  // Photos go on a page of their own, two per row, so the report page keeps its
+  // single-sheet layout.
+  const photoCells = photos.map(
+    (src) =>
+      '<td style="width:50%;padding:4px;vertical-align:top;"><img src="' + src +
+      '" style="width:100%;height:230px;object-fit:cover;display:block;border:0.5px solid ' + BORDER + ';"/></td>'
+  );
+  const photoRows: string[] = [];
+  for (let i = 0; i < photoCells.length; i += 2) {
+    photoRows.push('<tr>' + photoCells.slice(i, i + 2).join('') + (photoCells[i + 1] ? '' : '<td></td>') + '</tr>');
+  }
+  const photoPage = photos.length
+    ? '<div class="page" style="page-break-before:always;">' + header +
+      inlineLabel('Photos de l&#39;intervention &middot; ' + escapeHtml(customerFullName(report) || 'Client') + ' &middot; ' + escapeHtml(report.interventionDate)) +
+      '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">' + photoRows.join('') + '</table>' +
+      '</div>'
+    : '';
 
   const footer = '<div style="margin-top:12px;padding-top:5px;border-top:0.5px solid #D4D4D4;text-align:center;font-size:7.5px;color:#AAA;">Ramonage Marc Gomes Sud Vend&eacute;e &middot; 42 rue des Orch&icirc;d&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77</div>';
 
@@ -371,7 +415,7 @@ export function buildReportHtml(report: ReportDraft) {
     '</style></head><body><div class="page">' +
     header + titleBar + identity + legalBox + prestation + rapport + row2 + observations +
     signature + footer +
-    '</div></body></html>';
+    '</div>' + photoPage + '</body></html>';
 }
 
 const PAGE_OPTIONS = {
@@ -395,8 +439,14 @@ export function reportFileName(report: ReportDraft) {
   return customer ? `rapport-${stamp}-${customer}.pdf` : `rapport-${stamp}.pdf`;
 }
 
+/** Photos as data URIs for the PDF; a missing file is skipped rather than failing the export. */
+export async function reportPhotoDataUris(report: ReportDraft) {
+  const photos = await Promise.all(report.photos.map((uri) => photoDataUri(uri).catch(() => null)));
+  return photos.filter((photo): photo is string => photo !== null);
+}
+
 export async function exportReportPdf(report: ReportDraft) {
-  const html = buildReportHtml(report);
+  const html = buildReportHtml(report, await reportPhotoDataUris(report));
 
   if (Platform.OS === 'web') {
     await Print.printAsync({ html });
@@ -468,7 +518,7 @@ export async function saveReportPdf(report: ReportDraft): Promise<SavePdfResult>
   purgeGeneratedPdfs();
 
   const { base64 } = await Print.printToFileAsync({
-    html: buildReportHtml(report),
+    html: buildReportHtml(report, await reportPhotoDataUris(report)),
     ...PAGE_OPTIONS,
     base64: true,
   });

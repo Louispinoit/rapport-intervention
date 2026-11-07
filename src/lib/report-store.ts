@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 import type { ReportDraft } from '@/lib/report';
+import { deletePhotos } from '@/lib/photos';
 import { normalizeReportDraft } from '@/lib/report-defaults';
 
 type ReportRow = {
@@ -33,7 +34,10 @@ async function dropLegacyCustomerColumns(db: SQLite.SQLiteDatabase) {
     return;
   }
 
+  // One transaction: if the app is killed mid-way, nothing has moved, instead of
+  // the old table being dropped before the copy is renamed into place.
   await db.execAsync(`
+    BEGIN;
     CREATE TABLE reports_next (
       id TEXT PRIMARY KEY NOT NULL,
       intervention_date TEXT NOT NULL,
@@ -44,6 +48,7 @@ async function dropLegacyCustomerColumns(db: SQLite.SQLiteDatabase) {
       SELECT id, intervention_date, updated_at, data FROM reports;
     DROP TABLE reports;
     ALTER TABLE reports_next RENAME TO reports;
+    COMMIT;
   `);
 }
 
@@ -173,6 +178,8 @@ export async function listReportDrafts() {
       interventionDate: row.intervention_date,
       customerLastName: report.customerLastName ?? '',
       customerFirstName: report.customerFirstName ?? '',
+      customerAddress: report.customerAddress ?? '',
+      customerPhone: report.customerPhone ?? '',
       updatedAt: row.updated_at,
     };
   });
@@ -181,8 +188,22 @@ export async function listReportDrafts() {
 export async function deleteReportDraft(id: string) {
   await initReportStore();
   const db = await databasePromise;
+  const report = await loadReportDraft(id);
 
   await db.runAsync('DELETE FROM reports WHERE id = ?', id);
+  // Photos are files of their own, so they go with the report.
+  deletePhotos(report?.photos ?? []);
+}
+
+/** Every saved report in full, for backups and for finding orphaned photos. */
+export async function listAllReportDrafts() {
+  await initReportStore();
+  const db = await databasePromise;
+  const rows = await db.getAllAsync<ReportRow>(
+    'SELECT id, intervention_date, updated_at, data FROM reports ORDER BY updated_at DESC'
+  );
+
+  return rows.map((row) => normalizeReportDraft(JSON.parse(row.data) as Partial<ReportDraft>));
 }
 
 export async function loadReportDraft(id: string) {

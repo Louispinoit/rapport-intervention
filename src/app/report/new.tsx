@@ -1,5 +1,5 @@
-import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -10,6 +10,7 @@ import { FormSection, GroupLabel } from '@/components/ui/form-section';
 import { DownloadIcon } from '@/components/ui/icons';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { SectionCard } from '@/components/ui/section-card';
+import { PhotoField } from '@/components/ui/photo-field';
 import { SignatureField } from '@/components/ui/signature-pad';
 import { TextField } from '@/components/ui/text-field';
 import { FontFamily, MaxContentWidth, Spacing } from '@/constants/theme';
@@ -27,7 +28,7 @@ import {
   visibleDefectOptions,
   type ReportDraft,
 } from '@/lib/report';
-import { saveReportDraft } from '@/lib/report-store';
+import { loadReportDraft, saveReportDraft } from '@/lib/report-store';
 
 type MultiChoiceKey = 'services' | 'sootTypes' | 'visibleDefects' | 'advice';
 
@@ -74,6 +75,35 @@ export default function NewReportScreen() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [report, setReport] = useState<ReportDraft>(() => createEmptyReport());
+  // `from` = an earlier report for the same client, from a reminder or a saved report.
+  const { from } = useLocalSearchParams<{ from?: string }>();
+  const [prefilledFrom, setPrefilledFrom] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof from !== 'string') {
+      return;
+    }
+
+    let cancelled = false;
+    loadReportDraft(from).then((previous) => {
+      if (cancelled || !previous) {
+        return;
+      }
+      // Only who and where carry over: the findings belong to this visit.
+      setReport((current) => ({
+        ...current,
+        customerLastName: previous.customerLastName,
+        customerFirstName: previous.customerFirstName,
+        customerAddress: previous.customerAddress,
+        customerPhone: previous.customerPhone,
+      }));
+      setPrefilledFrom(previous.interventionDate);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [from]);
   const isCompact = width < 380;
   const dateIsValid = parseInterventionDate(report.interventionDate) !== null;
   const busy = saving || exporting;
@@ -166,6 +196,11 @@ export default function NewReportScreen() {
           <ThemedText style={{ color: theme.accent }} type="label">
             Fiche d’intervention
           </ThemedText>
+          {prefilledFrom ? (
+            <ThemedText style={[styles.prefill, { color: theme.textSecondary }]}>
+              Client repris du rapport du {prefilledFrom}. Vérifie l’adresse et le téléphone.
+            </ThemedText>
+          ) : null}
           <View style={[styles.nameRow, isCompact && styles.nameRowStacked]}>
             <View style={styles.nameField}>
               <TextField
@@ -196,6 +231,23 @@ export default function NewReportScreen() {
             onChangeText={(value) => updateField('interventionDate', value)}
             placeholder="jj/mm/aaaa"
             value={report.interventionDate}
+          />
+          <TextField
+            autoCapitalize="sentences"
+            autoComplete="street-address"
+            label="Adresse de l’intervention"
+            onChangeText={(value) => updateField('customerAddress', value)}
+            placeholder="12 rue des Lilas, 85580 Grues"
+            value={report.customerAddress}
+          />
+          <TextField
+            autoComplete="tel"
+            inputMode="tel"
+            label="Téléphone"
+            onChangeText={(value) => updateField('customerPhone', value)}
+            placeholder="06 12 34 56 78"
+            textContentType="telephoneNumber"
+            value={report.customerPhone}
           />
         </SectionCard>
 
@@ -251,7 +303,15 @@ export default function NewReportScreen() {
           />
         </FormSection>
 
-        <FormSection number="05" title="Signature du client">
+        <FormSection number="05" title="Photos">
+          <PhotoField
+            onChange={(photos) => updateField('photos', photos)}
+            photos={report.photos}
+            reportId={report.id}
+          />
+        </FormSection>
+
+        <FormSection number="06" title="Signature du client">
           <SignatureField
             onChange={(strokes) => updateField('signature', strokes)}
             strokes={report.signature}
@@ -336,6 +396,12 @@ const styles = StyleSheet.create({
   rule: {
     height: StyleSheet.hairlineWidth,
     marginHorizontal: -18,
+  },
+  prefill: {
+    fontFamily: FontFamily.body,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: -8,
   },
   note: {
     fontFamily: FontFamily.body,

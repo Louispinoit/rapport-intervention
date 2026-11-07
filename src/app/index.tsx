@@ -8,18 +8,39 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ChimneySmoke } from '@/components/ui/chimney-smoke';
-import { ArrowRightIcon, ChimneyMark, PlusIcon } from '@/components/ui/icons';
+import { ArchiveIcon, ArrowRightIcon, ChimneyMark, PlusIcon } from '@/components/ui/icons';
 import { PressableScale } from '@/components/ui/pressable-scale';
 import { PrimaryButton } from '@/components/ui/primary-button';
+import { ReminderRow } from '@/components/ui/reminder-row';
 import { ReportRow } from '@/components/ui/report-row';
 import { SectionCard } from '@/components/ui/section-card';
 import { SkeletonRows } from '@/components/ui/skeleton';
 import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { getLastBackupDate } from '@/lib/backup';
+import { dismissReminder, listDueClients, type DueClient } from '@/lib/reminders';
 import { reportDate, type ReportSummary } from '@/lib/report';
 import { listReportDrafts } from '@/lib/report-store';
 
 const RECENT_LIMIT = 4;
+const REMINDER_LIMIT = 3;
+/** Past this, home suggests making a backup. */
+const BACKUP_STALE_DAYS = 30;
+
+function daysSince(date: Date) {
+  return Math.floor((Date.now() - date.getTime()) / 86_400_000);
+}
+
+function backupLine(lastBackup: Date | null) {
+  if (!lastBackup) {
+    return 'Jamais sauvegardé';
+  }
+  const days = daysSince(lastBackup);
+  if (days === 0) {
+    return "Sauvegardé aujourd'hui";
+  }
+  return days === 1 ? 'Sauvegardé hier' : `Sauvegardé il y a ${days} jours`;
+}
 const SHEET_OVERLAP = 32;
 const WATERMARK_SIZE = 260;
 const rowEntrance = (index: number) =>
@@ -53,6 +74,8 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
   const [reports, setReports] = useState<ReportSummary[]>([]);
+  const [due, setDue] = useState<DueClient[]>([]);
+  const [lastBackup, setLastBackup] = useState<Date | null>(null);
   const [loading, setLoading] = useState(true);
   // A failed read must never look like "no reports": that reads as data loss.
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -67,8 +90,14 @@ export default function HomeScreen() {
     const loadReports = async () => {
       try {
         const nextReports = await listReportDrafts();
+        const [nextDue, nextBackup] = await Promise.all([
+          listDueClients(nextReports),
+          getLastBackupDate(),
+        ]);
         if (!cancelled) {
           setReports(nextReports);
+          setDue(nextDue);
+          setLastBackup(nextBackup);
           setLoadError(null);
         }
       } catch (error) {
@@ -91,6 +120,16 @@ export default function HomeScreen() {
   }, [isFocused]);
 
   const recentReports = reports.slice(0, RECENT_LIMIT);
+  const backupIsStale = lastBackup === null || daysSince(lastBackup) > BACKUP_STALE_DAYS;
+
+  async function hideReminder(key: string) {
+    setDue((current) => current.filter((client) => client.key !== key));
+    await dismissReminder(key);
+  }
+
+  function newReportFor(client: DueClient) {
+    router.push({ pathname: '/report/new', params: { from: client.lastReportId } });
+  }
   const summary = useMemo(() => countLine(reports), [reports]);
 
   return (
@@ -201,7 +240,74 @@ export default function HomeScreen() {
                 </View>
               </PressableScale>
             ) : null}
+
+            {reports.length > 0 ? (
+              <PressableScale
+                accessibilityRole="button"
+                onPress={() => router.push('/backup')}
+                scaleTo={0.98}
+                style={({ pressed }) => [
+                  styles.backupLink,
+                  { backgroundColor: pressed ? theme.backgroundSelected : 'transparent' },
+                ]}>
+                <ArchiveIcon color={backupIsStale ? theme.accent : theme.textSecondary} size={18} />
+                <ThemedText
+                  style={[
+                    styles.backupText,
+                    { color: backupIsStale ? theme.accent : theme.textSecondary },
+                  ]}>
+                  {backupLine(lastBackup)}
+                  {backupIsStale ? ' · sauvegarder' : ''}
+                </ThemedText>
+              </PressableScale>
+            ) : null}
           </SectionCard>
+
+          {/* Yearly sweeps coming due: the work that comes back by itself. */}
+          {due.length > 0 ? (
+            <SectionCard style={styles.remindersCard}>
+              <View style={styles.sheetHeader}>
+                <ThemedText style={{ color: theme.accent }} type="label">
+                  À relancer · {due.length}
+                </ThemedText>
+                <ThemedText style={[styles.remindersHint, { color: theme.textSecondary }]}>
+                  Ramonage annuel : dernier passage il y a plus de 11 mois.
+                </ThemedText>
+              </View>
+              <View>
+                {due.slice(0, REMINDER_LIMIT).map((client, index) => (
+                  <ReminderRow
+                    client={client}
+                    key={client.key}
+                    onDismiss={() => hideReminder(client.key)}
+                    onNewReport={() => newReportFor(client)}
+                    showDivider={index > 0}
+                  />
+                ))}
+              </View>
+              {due.length > REMINDER_LIMIT ? (
+                <PressableScale
+                  accessibilityRole="button"
+                  onPress={() => router.push('/reminders')}
+                  scaleTo={0.98}
+                  style={({ pressed }) => [
+                    styles.allLink,
+                    {
+                      backgroundColor: pressed ? theme.backgroundSelected : theme.background,
+                      borderColor: theme.line,
+                    },
+                  ]}>
+                  <ThemedText style={styles.allLinkText}>Tous les clients à relancer</ThemedText>
+                  <View style={styles.allLinkEnd}>
+                    <ThemedText style={[styles.allLinkCount, { color: theme.textSecondary }]}>
+                      {due.length}
+                    </ThemedText>
+                    <ArrowRightIcon color={theme.accent} size={18} />
+                  </View>
+                </PressableScale>
+              ) : null}
+            </SectionCard>
+          ) : null}
         </View>
       </ScrollView>
 
@@ -334,6 +440,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     borderRadius: Radius.md,
     borderWidth: StyleSheet.hairlineWidth,
+  },
+  backupLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 44,
+    paddingHorizontal: Spacing.three,
+    borderRadius: Radius.md,
+  },
+  backupText: {
+    fontFamily: FontFamily.bodySemibold,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  remindersCard: {
+    marginTop: Spacing.three,
+    borderRadius: Radius.xl,
+    gap: Spacing.one,
+    paddingTop: 20,
+    paddingBottom: 14,
+    paddingHorizontal: 14,
+  },
+  remindersHint: {
+    fontFamily: FontFamily.body,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 4,
   },
   allLinkText: {
     fontFamily: FontFamily.bodySemibold,

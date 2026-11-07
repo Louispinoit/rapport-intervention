@@ -2,7 +2,7 @@
   "expo": {
     "name": "Marc Gomes Sud Vendée",
     "slug": "rapport-intervention-mobile",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "rapportinterventionmobile",
@@ -56,6 +56,14 @@
             "./node_modules/@expo-google-fonts/figtree/600SemiBold/Figtree_600SemiBold.ttf",
             "./node_modules/@expo-google-fonts/figtree/700Bold/Figtree_700Bold.ttf"
           ]
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "L'appareil photo sert à photographier le conduit ou un défaut pour l'ajouter au rapport.",
+          "photosPermission": "L'accès aux photos sert à joindre une photo existante au rapport.",
+          "microphonePermission": false
         }
       ]
     ],

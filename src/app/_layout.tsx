@@ -21,6 +21,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { UpdateBanner } from '@/components/ui/update-banner';
 import { Colors, FontFamily } from '@/constants/theme';
 import { purgeGeneratedPdfs, purgeSavedPdfs } from '@/lib/pdf-cache';
+import { purgeOrphanPhotos } from '@/lib/photos';
+import { listAllReportDrafts } from '@/lib/report-store';
 
 // Keep the red splash up until the brand fonts are in, so the first frame is
 // never set in the fallback font.
@@ -46,6 +48,10 @@ export default function RootLayout() {
   React.useEffect(() => {
     purgeGeneratedPdfs();
     purgeSavedPdfs();
+    // Photos from reports started but never saved.
+    listAllReportDrafts()
+      .then((reports) => purgeOrphanPhotos(new Set(reports.flatMap((report) => report.photos))))
+      .catch(() => undefined);
   }, []);
 
   React.useEffect(() => {
@@ -94,6 +100,8 @@ export default function RootLayout() {
           <Stack.Screen name="history" options={{ title: 'HISTORIQUE' }} />
           <Stack.Screen name="report/new" options={{ title: 'NOUVEAU RAPPORT' }} />
           <Stack.Screen name="report/[id]" options={{ title: 'RAPPORT' }} />
+          <Stack.Screen name="reminders" options={{ title: 'À RELANCER' }} />
+          <Stack.Screen name="backup" options={{ title: 'SAUVEGARDE' }} />
         </Stack>
       </ThemeProvider>
     </GestureHandlerRootView>
