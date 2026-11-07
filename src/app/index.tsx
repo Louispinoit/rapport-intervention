@@ -54,6 +54,8 @@ export default function HomeScreen() {
   const theme = useTheme();
   const [reports, setReports] = useState<ReportSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  // A failed read must never look like "no reports": that reads as data loss.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isFocused) {
@@ -67,6 +69,12 @@ export default function HomeScreen() {
         const nextReports = await listReportDrafts();
         if (!cancelled) {
           setReports(nextReports);
+          setLoadError(null);
+        }
+      } catch (error) {
+        console.error('Reading the saved reports failed', error);
+        if (!cancelled) {
+          setLoadError(error instanceof Error ? error.message : String(error));
         }
       } finally {
         if (!cancelled) {
@@ -137,6 +145,14 @@ export default function HomeScreen() {
 
             {loading ? (
               <SkeletonRows count={3} />
+            ) : loadError ? (
+              <View style={styles.empty}>
+                <ThemedText style={styles.emptyTitle}>Lecture impossible</ThemedText>
+                <ThemedText selectable style={[styles.emptyText, { color: theme.textSecondary }]}>
+                  Les rapports enregistrés n’ont pas pu être lus. Ils ne sont pas effacés :
+                  ferme l’app et rouvre-la. ({loadError})
+                </ThemedText>
+              </View>
             ) : recentReports.length === 0 ? (
               <View style={styles.empty}>
                 <View style={[styles.emptyMark, { backgroundColor: theme.accentSoft }]}>

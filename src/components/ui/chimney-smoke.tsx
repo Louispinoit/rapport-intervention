@@ -1,5 +1,6 @@
 import { StyleSheet, View } from 'react-native';
 import Animated, { useReducedMotion } from 'react-native-reanimated';
+import Svg, { Path } from 'react-native-svg';
 
 type ChimneySmokeProps = {
   /** Size the ChimneyMark is drawn at, so the puffs line up with its chimney. */
@@ -12,10 +13,7 @@ type ChimneySmokeProps = {
 
 const PUFF_COUNT = 3;
 const CYCLE = 4200;
-/**
- * Transparency lives on the whole puff, and its circles are drawn solid, so
- * where they overlap they merge into one cloud instead of stacking brighter.
- */
+/** Transparency lives on the whole puff; the cloud itself is drawn solid. */
 const PEAK_OPACITY = 0.22;
 
 /**
@@ -68,10 +66,9 @@ export function ChimneySmoke({ markSize, color, running }: ChimneySmokeProps) {
               animationPlayState: running ? 'running' : 'paused',
             },
           ]}>
-          {/* Three overlapping circles read as a small cloud rather than a dot. */}
-          <View style={[styles.blob, styles.blobA, { backgroundColor: color }]} />
-          <View style={[styles.blob, styles.blobB, { backgroundColor: color }]} />
-          <View style={[styles.blob, styles.blobC, { backgroundColor: color }]} />
+          <Svg height={PUFF.height} viewBox={`0 0 ${PUFF.width} ${PUFF.height}`} width={PUFF.width}>
+            <Path d={CLOUD} fill={color} />
+          </Svg>
         </Animated.View>
       ))}
     </View>
@@ -79,6 +76,17 @@ export function ChimneySmoke({ markSize, color, running }: ChimneySmokeProps) {
 }
 
 const PUFF = { width: 34, height: 24 };
+
+function circle(cx: number, cy: number, r: number) {
+  return `M${cx - r} ${cy}a${r} ${r} 0 1 0 ${2 * r} 0a${r} ${r} 0 1 0 ${-2 * r} 0`;
+}
+
+/**
+ * Three overlapping circles in a single path, filled as one shape. Android
+ * applies a parent's opacity to each child separately, so separate circles
+ * showed brighter lens shapes where they overlapped; one path has no overlap.
+ */
+const CLOUD = [circle(9, 15.5, 8.5), circle(18.5, 9.5, 9.5), circle(26, 15.5, 7.5)].join('');
 
 const styles = StyleSheet.create({
   origin: {
@@ -92,11 +100,4 @@ const styles = StyleSheet.create({
     width: PUFF.width,
     height: PUFF.height,
   },
-  blob: {
-    position: 'absolute',
-    borderRadius: 999,
-  },
-  blobA: { left: 0, top: 7, width: 18, height: 17 },
-  blobB: { left: 9, top: 0, width: 19, height: 19 },
-  blobC: { left: 18, top: 8, width: 16, height: 15 },
 });
