@@ -7,6 +7,7 @@ import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
+import { ChimneySmoke } from '@/components/ui/chimney-smoke';
 import { ArrowRightIcon, ChimneyMark, PlusIcon } from '@/components/ui/icons';
 import { PressableScale } from '@/components/ui/pressable-scale';
 import { PrimaryButton } from '@/components/ui/primary-button';
@@ -20,6 +21,7 @@ import { listReportDrafts } from '@/lib/report-store';
 
 const RECENT_LIMIT = 4;
 const SHEET_OVERLAP = 32;
+const WATERMARK_SIZE = 260;
 const rowEntrance = (index: number) =>
   FadeInDown.duration(280)
     .delay(index * 45)
@@ -99,7 +101,12 @@ export default function HomeScreen() {
             },
           ]}>
           <View style={styles.watermark}>
-            <ChimneyMark color={theme.liveryShade} size={260} />
+            <ChimneySmoke
+              color={theme.accentForeground}
+              markSize={WATERMARK_SIZE}
+              running={isFocused}
+            />
+            <ChimneyMark color={theme.liveryShade} size={WATERMARK_SIZE} />
           </View>
 
           <View style={styles.liveryInner}>
