@@ -10,7 +10,9 @@ import {
 } from '@/lib/report-store';
 
 const FORMAT = 'rapport-intervention-sauvegarde';
-const VERSION = 1;
+// 2: findings live per flue, in `chimneys`. Version 1 files are still read:
+// normalizeReportDraft turns their flat findings into a single flue.
+const VERSION = 2;
 const LAST_BACKUP_KEY = 'last-backup-at';
 
 type BackupFile = {

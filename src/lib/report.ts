@@ -63,6 +63,19 @@ export const woodBestPracticeItems = [
   'Éviter la mise au ralenti excessive, notamment la nuit.',
 ] as const;
 
+/** One flue swept during the visit, with its own findings. */
+export type ChimneyEntry = {
+  id: string;
+  /** Free name, e.g. "Salon" or "Chaudière"; empty means "Conduit n". */
+  label: string;
+  services: string[];
+  sootTypes: string[];
+  sootVolume: string;
+  visibleDefects: string[];
+  advice: string[];
+  observations: string;
+};
+
 export type ReportDraft = {
   id: string;
   createdAt: string;
@@ -73,12 +86,8 @@ export type ReportDraft = {
   /** Where the job was done; printed on the PDF. */
   customerAddress: string;
   customerPhone: string;
-  services: string[];
-  sootTypes: string[];
-  sootVolume: string;
-  visibleDefects: string[];
-  advice: string[];
-  observations: string;
+  /** Always at least one. */
+  chimneys: ChimneyEntry[];
   /** SVG path commands, one per stroke, in the SIGNATURE_BOX coordinate space. */
   signature: string[];
   /** Photo URIs: app files on the phone, data URIs on web. At most MAX_PHOTOS. */
@@ -86,6 +95,26 @@ export type ReportDraft = {
 };
 
 export const MAX_PHOTOS = 4;
+export const MAX_CHIMNEYS = 6;
+/** Keeps one flue's findings on a single PDF page. */
+export const MAX_OBSERVATIONS_LENGTH = 600;
+
+export function chimneyLabel(chimney: Pick<ChimneyEntry, 'label'>, index: number) {
+  return chimney.label.trim() || `Conduit ${index + 1}`;
+}
+
+/** Ticked anything at all: used to ask before throwing a flue away. */
+export function chimneyHasAnswers(chimney: ChimneyEntry) {
+  return (
+    chimney.services.length > 0 ||
+    chimney.sootTypes.length > 0 ||
+    chimney.sootVolume !== '' ||
+    chimney.visibleDefects.length > 0 ||
+    chimney.advice.length > 0 ||
+    chimney.observations.trim() !== '' ||
+    chimney.label.trim() !== ''
+  );
+}
 
 export type ReportSummary = {
   id: string;
@@ -153,7 +182,7 @@ export function reportDate(summary: Pick<ReportSummary, 'interventionDate' | 'up
   return Number.isNaN(savedAt.getTime()) ? new Date(0) : savedAt;
 }
 
-export { createEmptyReport, normalizeReportDraft } from '@/lib/report-defaults';
+export { createEmptyChimney, createEmptyReport, normalizeReportDraft } from '@/lib/report-defaults';
 
 export function toggleSelection(values: string[], value: string) {
   return values.includes(value)
