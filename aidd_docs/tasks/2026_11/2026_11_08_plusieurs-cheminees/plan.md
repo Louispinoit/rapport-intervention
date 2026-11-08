@@ -1,6 +1,6 @@
 ---
 objective: "Un rapport peut couvrir plusieurs conduits, chacun avec son propre questionnaire, à l'écran comme dans un PDF propre d'une page par conduit, sans rien casser des rapports et sauvegardes existants."
-status: in-progress
+status: implemented
 ---
 
 # Plan: Plusieurs cheminées par rapport
