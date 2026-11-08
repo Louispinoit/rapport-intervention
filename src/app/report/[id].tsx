@@ -27,6 +27,7 @@ import { FontFamily, MaxContentWidth, Radius, Spacing } from '@/constants/theme'
 import { useTheme } from '@/hooks/use-theme';
 import { successHaptic } from '@/lib/haptics';
 import {
+  chimneyLabel,
   chooseSaveDirectory,
   customerFullName,
   parseInterventionDate,
@@ -360,33 +361,49 @@ export default function SavedReportScreen() {
           ) : null}
         </View>
 
-        <FormSection number="01" title="Prestation demandée">
-          <SelectedList values={report.services} />
-        </FormSection>
+        {report.chimneys.map((chimney, index) => (
+          <View key={chimney.id} style={styles.chimney}>
+            {/* A single flue reads exactly like reports always did: no heading. */}
+            {report.chimneys.length > 1 ? (
+              <View style={[styles.chimneyHead, { borderColor: theme.accent }]}>
+                <ThemedText style={[styles.chimneyCount, { color: theme.accent }]}>
+                  {index + 1} / {report.chimneys.length}
+                </ThemedText>
+                <ThemedText numberOfLines={2} style={styles.chimneyName}>
+                  {chimneyLabel(chimney, index)}
+                </ThemedText>
+              </View>
+            ) : null}
 
-        <FormSection number="02" title="Rapport d’intervention">
-          <SelectedList title="Types de suies" values={report.sootTypes} />
-          <SelectedList
-            title="Volume des suies"
-            values={report.sootVolume ? [report.sootVolume] : []}
-          />
-          <SelectedList title="Défauts apparents" values={report.visibleDefects} />
-        </FormSection>
+            <FormSection number="01" title="Prestation demandée">
+              <SelectedList values={chimney.services} />
+            </FormSection>
 
-        <FormSection number="03" title="Conseils">
-          <SelectedList values={report.advice} />
-        </FormSection>
+            <FormSection number="02" title="Rapport d’intervention">
+              <SelectedList title="Types de suies" values={chimney.sootTypes} />
+              <SelectedList
+                title="Volume des suies"
+                values={chimney.sootVolume ? [chimney.sootVolume] : []}
+              />
+              <SelectedList title="Défauts apparents" values={chimney.visibleDefects} />
+            </FormSection>
 
-        <FormSection number="04" title="Autres observations">
-          <ThemedText
-            selectable
-            style={[
-              styles.body,
-              { color: report.observations ? theme.text : theme.textTertiary },
-            ]}>
-            {report.observations || 'Aucune observation complémentaire'}
-          </ThemedText>
-        </FormSection>
+            <FormSection number="03" title="Conseils">
+              <SelectedList values={chimney.advice} />
+            </FormSection>
+
+            <FormSection number="04" title="Autres observations">
+              <ThemedText
+                selectable
+                style={[
+                  styles.body,
+                  { color: chimney.observations ? theme.text : theme.textTertiary },
+                ]}>
+                {chimney.observations || 'Aucune observation complémentaire'}
+              </ThemedText>
+            </FormSection>
+          </View>
+        ))}
 
         <FormSection number="05" title="Photos">
           <PhotoField photos={report.photos} readOnly reportId={report.id} />
@@ -477,6 +494,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: Spacing.two,
     paddingBottom: Spacing.five,
+  },
+  chimney: {
+    gap: 28,
+  },
+  // Set like the PDF's band: a red rule, the count, then the flue's name.
+  chimneyHead: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 12,
+    borderTopWidth: 3,
+    paddingTop: 12,
+    paddingHorizontal: Spacing.one,
+  },
+  chimneyCount: {
+    fontFamily: FontFamily.displayHeavy,
+    fontSize: 15,
+    letterSpacing: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  chimneyName: {
+    flex: 1,
+    fontFamily: FontFamily.displayHeavy,
+    fontSize: 26,
+    lineHeight: 30,
+    textTransform: 'uppercase',
+    letterSpacing: 0.2,
   },
   missingCard: {
     gap: Spacing.three,
