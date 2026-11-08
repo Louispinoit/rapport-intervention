@@ -38,6 +38,7 @@ export const visibleDefectOptions = [
   'Appareil de chauffage',
   'Conduit de raccordement',
   'Conduit de fumée',
+  'Tubage défectueux ou vieillissant',
   "Hotte d'insert ou d'âtre",
   "Amenée d'air dédiée",
   'Autres',
@@ -46,8 +47,9 @@ export const visibleDefectOptions = [
 export const adviceOptions = [
   "Ne plus utiliser l'installation jusqu'à réhabilitation",
   "Corriger les défauts d'installation",
-  'Envisager un changement du générateur',
+  "Envisager un changement de l'insert / poêle",
   'Faire réaliser un diagnostic du conduit de fumée',
+  "Une vérification de l'état du tubage incluant un test d'étanchéité doit être effectuée obligatoirement tous les 3 ans",
   'Faire débistrer le conduit de fumée',
   "Améliorer les bonnes pratiques d'utilisation du foyer",
 ] as const;
@@ -219,7 +221,7 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
     const box = checked
       ? '<span style="display:inline-block;width:11px;height:11px;background:' + RED + ';border:1px solid ' + RED + ';color:white;font-size:8px;font-weight:bold;line-height:11px;text-align:center;flex-shrink:0;">&#x2713;</span>'
       : '<span style="display:inline-block;width:11px;height:11px;border:1px solid #AAAAAA;background:white;flex-shrink:0;"></span>';
-    return '<div style="display:flex;align-items:center;gap:5px;font-size:9px;padding:4px 0;">' + box + '<span>' + escapeHtml(option) + '</span></div>';
+    return '<div style="display:flex;align-items:center;gap:5px;font-size:9px;padding:3px 0;">' + box + '<span>' + escapeHtml(option) + '</span></div>';
   }
 
   function inlineLabel(title: string) {
@@ -303,74 +305,86 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
     '</div>',
   ].join('');
 
-  // Prestation — subtle inline label + 3-column checkbox grid
-  const prestationRows: string[] = [];
-  for (let i = 0; i < serviceOptions.length; i += 3) {
-    const cells = (serviceOptions as readonly string[]).slice(i, i + 3)
-      .map((o) => '<td style="width:33%;vertical-align:top;">' + cb(o, report.services.includes(o)) + '</td>')
-      .join('');
-    prestationRows.push('<tr>' + cells + '</tr>');
+  // An option renamed since a report was saved (e.g. "changement du générateur")
+  // is still printed, ticked, after the current ones: a regenerated PDF must
+  // say what the client signed.
+  function withRetired(options: readonly string[], selected: string[]) {
+    return [...options, ...selected.filter((value) => !options.includes(value))];
   }
 
-  const prestation = [
-    '<div style="margin-bottom:14px;">',
-    inlineLabel('Prestation demand&eacute;e par le client'),
-    '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">',
-    prestationRows.join(''),
-    '</table>',
-    '</div>',
-  ].join('');
+  // One flue's findings: what was asked, what was found, what to do about it.
+  function chimneyFindings(chimney: ChimneyEntry) {
+    // Prestation — subtle inline label + 3-column checkbox grid
+    const prestationRows: string[] = [];
+    const services = withRetired(serviceOptions, chimney.services);
+    for (let i = 0; i < services.length; i += 3) {
+      const cells = services.slice(i, i + 3)
+        .map((o) => '<td style="width:33%;vertical-align:top;">' + cb(o, chimney.services.includes(o)) + '</td>')
+        .join('');
+      prestationRows.push('<tr>' + cells + '</tr>');
+    }
 
-  // Rapport d'intervention — full-width, 3 columns inside
-  const rapport = [
-    '<div style="margin-bottom:14px;">',
-    inlineLabel('Rapport d&#39;intervention'),
-    '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">',
-    '<tr>',
-    '<td style="width:34%;vertical-align:top;padding-right:8px;">',
-    subLabelFirst('Types de su&iuml;es'),
-    sootTypeOptions.map((o) => cb(o, report.sootTypes.includes(o))).join(''),
-    '</td>',
-    '<td style="width:22%;vertical-align:top;padding:0 8px;border-left:0.5px solid ' + BORDER + ';border-right:0.5px solid ' + BORDER + ';">',
-    subLabelFirst('Volume des su&iuml;es'),
-    sootVolumeOptions.map((o) => cb(o, report.sootVolume === o)).join(''),
-    '</td>',
-    '<td style="width:44%;vertical-align:top;padding-left:8px;">',
-    subLabelFirst('D&eacute;fauts apparents'),
-    visibleDefectOptions.map((o) => cb(o, report.visibleDefects.includes(o))).join(''),
-    '</td>',
-    '</tr>',
-    '</table>',
-    '</div>',
-  ].join('');
+    const prestation = [
+      '<div style="margin-bottom:14px;">',
+      inlineLabel('Prestation demand&eacute;e par le client'),
+      '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">',
+      prestationRows.join(''),
+      '</table>',
+      '</div>',
+    ].join('');
 
-  const row2 = [
-    '<div style="margin-bottom:14px;">',
-    '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">',
-    '<tr>',
-    '<td style="width:50%;vertical-align:top;padding-right:8px;">',
-    inlineLabel('Conseils'),
-    adviceOptions.map((o) => cb(o, report.advice.includes(o))).join(''),
-    '</td>',
-    '<td style="width:50%;vertical-align:top;padding-left:8px;border-left:0.5px solid ' + BORDER + ';">',
-    inlineLabel('Bonnes pratiques bois'),
-    woodBestPracticeItems.map(bulletItem).join(''),
-    '</td>',
-    '</tr>',
-    '</table>',
-    '</div>',
-  ].join('');
+    // Rapport d'intervention — full-width, 3 columns inside
+    const rapport = [
+      '<div style="margin-bottom:14px;">',
+      inlineLabel('Rapport d&#39;intervention'),
+      '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">',
+      '<tr>',
+      '<td style="width:34%;vertical-align:top;padding-right:8px;">',
+      subLabelFirst('Types de su&iuml;es'),
+      withRetired(sootTypeOptions, chimney.sootTypes).map((o) => cb(o, chimney.sootTypes.includes(o))).join(''),
+      '</td>',
+      '<td style="width:22%;vertical-align:top;padding:0 8px;border-left:0.5px solid ' + BORDER + ';border-right:0.5px solid ' + BORDER + ';">',
+      subLabelFirst('Volume des su&iuml;es'),
+      withRetired(sootVolumeOptions, chimney.sootVolume ? [chimney.sootVolume] : []).map((o) => cb(o, chimney.sootVolume === o)).join(''),
+      '</td>',
+      '<td style="width:44%;vertical-align:top;padding-left:8px;">',
+      subLabelFirst('D&eacute;fauts apparents'),
+      withRetired(visibleDefectOptions, chimney.visibleDefects).map((o) => cb(o, chimney.visibleDefects.includes(o))).join(''),
+      '</td>',
+      '</tr>',
+      '</table>',
+      '</div>',
+    ].join('');
 
-  const obsColor = report.observations ? TEXT : '#AAA';
-  const obsStyle = report.observations ? 'normal' : 'italic';
-  const observations = [
-    inlineLabel('Autres observations'),
-    // Tighter than it used to be (60px), with the signature below, to pay back
-    // the room the address and phone row takes, so the report stays on one sheet.
-    '<p style="font-size:9px;color:' + obsColor + ';font-style:' + obsStyle + ';min-height:40px;line-height:1.6;">',
-    report.observations ? escapeHtml(report.observations) : 'Aucune observation compl&eacute;mentaire',
-    '</p>',
-  ].join('');
+    const row2 = [
+      '<div style="margin-bottom:14px;">',
+      '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">',
+      '<tr>',
+      '<td style="width:50%;vertical-align:top;padding-right:8px;">',
+      inlineLabel('Conseils'),
+      withRetired(adviceOptions, chimney.advice).map((o) => cb(o, chimney.advice.includes(o))).join(''),
+      '</td>',
+      '<td style="width:50%;vertical-align:top;padding-left:8px;border-left:0.5px solid ' + BORDER + ';">',
+      inlineLabel('Bonnes pratiques bois'),
+      woodBestPracticeItems.map(bulletItem).join(''),
+      '</td>',
+      '</tr>',
+      '</table>',
+      '</div>',
+    ].join('');
+
+    const obsColor = chimney.observations ? TEXT : '#AAA';
+    const obsStyle = chimney.observations ? 'normal' : 'italic';
+    const observations = [
+      inlineLabel('Autres observations'),
+      // pre-line keeps the line breaks typed on the phone.
+      '<p style="font-size:9px;color:' + obsColor + ';font-style:' + obsStyle + ';line-height:1.6;white-space:pre-line;overflow-wrap:anywhere;">',
+      chimney.observations ? escapeHtml(chimney.observations) : 'Aucune observation compl&eacute;mentaire',
+      '</p>',
+    ].join('');
+
+    return { checklists: prestation + rapport + row2, observations };
+  }
 
   // Reserves exactly the height a signature would take, so an unsigned report
   // keeps the same layout as a signed one.
@@ -390,7 +404,7 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
 
   // Only the client signs: Marc is identified by the letterhead and by the invoice.
   const signature = [
-    '<div style="width:46%;margin-top:14px;">',
+    '<div>',
     inlineLabel('Signature du client'),
     signatureBox,
     '<div style="border-top:0.5px solid ' + MUTED + ';padding-top:3px;font-size:7.5px;color:' + MUTED + ';">',
@@ -401,8 +415,31 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
     '</div>',
   ].join('');
 
-  // Photos go on a page of their own, two per row, so the report page keeps its
-  // single-sheet layout.
+  const chimneys = report.chimneys;
+  const several = chimneys.length > 1;
+  const customerLine = [customerFullName(report) || 'Client', report.interventionDate, report.customerAddress]
+    .filter(Boolean)
+    .map(escapeHtml)
+    .join(' &middot; ');
+
+  // Pages after the first repeat who and when in one line, so a loose sheet
+  // still says which client it belongs to.
+  const identityReminder =
+    '<div style="font-size:9px;color:' + MUTED + ';padding-bottom:6px;margin-bottom:12px;border-bottom:0.5px solid ' + BORDER + ';">' +
+    '<span style="font-weight:700;color:' + TEXT + ';">' + customerLine + '</span></div>';
+
+  // Names the flue a page is about. Absent for a single flue, so those reports
+  // print exactly as they always have.
+  function chimneyBand(chimney: ChimneyEntry, index: number) {
+    const name = chimney.label.trim();
+    return '<div style="display:flex;align-items:baseline;gap:8px;background:' + RED_BG + ';border-left:3px solid ' + RED + ';padding:6px 10px;margin-bottom:12px;">' +
+      '<span style="font-size:9px;font-weight:900;color:' + RED + ';text-transform:uppercase;letter-spacing:1px;white-space:nowrap;">Conduit ' + (index + 1) + ' / ' + chimneys.length + '</span>' +
+      (name ? '<span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;">' + escapeHtml(name) + '</span>' : '') +
+      '</div>';
+  }
+
+  // Photos go on a page of their own, two per row, so the report pages keep
+  // their single-sheet layout.
   const photoCells = photos.map(
     (src) =>
       '<td style="width:50%;padding:4px;vertical-align:top;"><img src="' + src +
@@ -412,14 +449,48 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
   for (let i = 0; i < photoCells.length; i += 2) {
     photoRows.push('<tr>' + photoCells.slice(i, i + 2).join('') + (photoCells[i + 1] ? '' : '<td></td>') + '</tr>');
   }
-  const photoPage = photos.length
-    ? '<div class="page" style="page-break-before:always;">' + header +
+
+  const pageCount = chimneys.length + (photos.length ? 1 : 0);
+  // Numbered only when there is more than one sheet to keep together.
+  function footer(pageNumber: number) {
+    const number = pageCount > 1
+      ? '<span style="position:absolute;right:0;top:5px;font-weight:700;color:' + MUTED + ';">' + pageNumber + '&thinsp;/&thinsp;' + pageCount + '</span>'
+      : '';
+    return '<div class="foot">Ramonage Marc Gomes Sud Vend&eacute;e &middot; 42 rue des Orch&icirc;d&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77' + number + '</div>';
+  }
+
+  const pages = chimneys.map((chimney, index) => {
+    const first = index === 0;
+    const last = index === chimneys.length - 1;
+    const findings = chimneyFindings(chimney);
+    // The client signs once, on the last flue's page, for the whole visit. The
+    // signature sits beside the observations rather than under them, which is
+    // what keeps a fully ticked flue and its signature on one sheet.
+    const closing = last
+      ? '<table style="table-layout:fixed;border-collapse:collapse;width:100%;"><tr>' +
+        '<td style="width:54%;vertical-align:top;padding-right:12px;">' + findings.observations + '</td>' +
+        '<td style="width:46%;vertical-align:top;">' + signature + '</td>' +
+        '</tr></table>'
+      : findings.observations;
+    return '<div class="page">' +
+      header + titleBar +
+      (first ? identity + legalBox : identityReminder) +
+      (several ? chimneyBand(chimney, index) : '') +
+      findings.checklists +
+      closing +
+      footer(index + 1) +
+      '</div>';
+  });
+
+  if (photos.length) {
+    pages.push(
+      '<div class="page">' + header +
       inlineLabel('Photos de l&#39;intervention &middot; ' + escapeHtml(customerFullName(report) || 'Client') + ' &middot; ' + escapeHtml(report.interventionDate)) +
       '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">' + photoRows.join('') + '</table>' +
+      footer(pageCount) +
       '</div>'
-    : '';
-
-  const footer = '<div style="margin-top:12px;padding-top:5px;border-top:0.5px solid #D4D4D4;text-align:center;font-size:7.5px;color:#AAA;">Ramonage Marc Gomes Sud Vend&eacute;e &middot; 42 rue des Orch&icirc;d&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77</div>';
+    );
+  }
 
   // Android's print WebView ignores `@page { margin }`, which pushes the content
   // flush against the paper edge and clips right-hand borders. The margin is a
@@ -436,15 +507,18 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
   // viewport ends up narrower than the sheet and flush left. 1pt = 1/72in, the
   // same unit printToFileAsync takes, so this matches the paper exactly.
   const pageWidth = A4_WIDTH + 'pt';
+  // Each sheet has the paper's height, so the footer sits at the same place on
+  // every page and a flue never runs onto the next one. A hair under A4: a page
+  // exactly as tall as the paper can round up and push a blank sheet out.
+  const pageHeight = A4_HEIGHT - 2 + 'pt';
 
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"/><style>' +
     pageStyle + ' * { box-sizing: border-box; } body { ' + bodyStyle + ' }' +
-    ' .page { width: ' + pageWidth + '; padding: 12mm; }' +
+    ' .page { position: relative; width: ' + pageWidth + '; height: ' + pageHeight + '; padding: 12mm 12mm 18mm; overflow: hidden; break-after: page; page-break-after: always; }' +
+    ' .page:last-child { break-after: auto; page-break-after: auto; }' +
+    ' .foot { position: absolute; left: 12mm; right: 12mm; bottom: 9mm; padding-top: 5px; border-top: 0.5px solid #D4D4D4; text-align: center; font-size: 7.5px; color: #AAA; }' +
     ' table { border-collapse: collapse; width: 100%; } h1, h2, h3, p { margin: 0; }' +
-    '</style></head><body><div class="page">' +
-    header + titleBar + identity + legalBox + prestation + rapport + row2 + observations +
-    signature + footer +
-    '</div>' + photoPage + '</body></html>';
+    '</style></head><body>' + pages.join('') + '</body></html>';
 }
 
 const PAGE_OPTIONS = {
