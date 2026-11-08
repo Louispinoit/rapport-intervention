@@ -48,8 +48,7 @@ export const adviceOptions = [
   "Ne plus utiliser l'installation jusqu'à réhabilitation",
   "Corriger les défauts d'installation",
   "Envisager un changement de l'insert / poêle",
-  'Faire réaliser un diagnostic du conduit de fumée',
-  "Une vérification de l'état du tubage incluant un test d'étanchéité doit être effectuée obligatoirement tous les 3 ans",
+  "Faire réaliser un diagnostic du conduit de fumée. Une vérification de l'état du tubage incluant un test d'étanchéité doit être effectuée obligatoirement tous les 3 ans",
   'Faire débistrer le conduit de fumée',
   "Améliorer les bonnes pratiques d'utilisation du foyer",
 ] as const;
@@ -219,9 +218,9 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
 
   function cb(option: string, checked: boolean) {
     const box = checked
-      ? '<span style="display:inline-block;width:11px;height:11px;background:' + RED + ';border:1px solid ' + RED + ';color:white;font-size:8px;font-weight:bold;line-height:11px;text-align:center;flex-shrink:0;">&#x2713;</span>'
-      : '<span style="display:inline-block;width:11px;height:11px;border:1px solid #AAAAAA;background:white;flex-shrink:0;"></span>';
-    return '<div style="display:flex;align-items:center;gap:5px;font-size:9px;padding:3px 0;">' + box + '<span>' + escapeHtml(option) + '</span></div>';
+      ? '<span style="display:inline-block;width:11px;height:11px;background:' + RED + ';border:1px solid ' + RED + ';color:white;font-size:8px;font-weight:bold;line-height:11px;text-align:center;flex-shrink:0;margin-top:1px;">&#x2713;</span>'
+      : '<span style="display:inline-block;width:11px;height:11px;border:1px solid #AAAAAA;background:white;flex-shrink:0;margin-top:1px;"></span>';
+    return '<div style="display:flex;align-items:flex-start;gap:5px;font-size:9px;line-height:1.4;padding:3px 0;">' + box + '<span>' + escapeHtml(option) + '</span></div>';
   }
 
   function inlineLabel(title: string) {
