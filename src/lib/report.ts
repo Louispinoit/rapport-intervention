@@ -254,7 +254,7 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
   const header = [
     '<div style="border-bottom:2px solid ' + RED + ';padding-bottom:8px;margin-bottom:10px;">',
     '<div style="font-size:17px;font-weight:900;color:' + RED + ';text-transform:uppercase;letter-spacing:0.5px;">Ramonage Marc Gomes Sud Vend&eacute;e</div>',
-    '<div style="font-size:8.5px;color:#888;margin-top:3px;">42 rue des Orch&icirc;d&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77</div>',
+    '<div style="font-size:8.5px;color:#888;margin-top:3px;">42 rue des Orchid&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77</div>',
     '</div>',
   ].join('');
 
@@ -339,11 +339,11 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
       '<table style="table-layout:fixed;border-collapse:collapse;width:100%;">',
       '<tr>',
       '<td style="width:34%;vertical-align:top;padding-right:8px;">',
-      subLabelFirst('Types de su&iuml;es'),
+      subLabelFirst('Types de suies'),
       withRetired(sootTypeOptions, chimney.sootTypes).map((o) => cb(o, chimney.sootTypes.includes(o))).join(''),
       '</td>',
       '<td style="width:22%;vertical-align:top;padding:0 8px;border-left:0.5px solid ' + BORDER + ';border-right:0.5px solid ' + BORDER + ';">',
-      subLabelFirst('Volume des su&iuml;es'),
+      subLabelFirst('Volume des suies'),
       withRetired(sootVolumeOptions, chimney.sootVolume ? [chimney.sootVolume] : []).map((o) => cb(o, chimney.sootVolume === o)).join(''),
       '</td>',
       '<td style="width:44%;vertical-align:top;padding-left:8px;">',
@@ -455,7 +455,7 @@ export function buildReportHtml(report: ReportDraft, photos: string[] = []) {
     const number = pageCount > 1
       ? '<span style="position:absolute;right:0;top:5px;font-weight:700;color:' + MUTED + ';">' + pageNumber + '&thinsp;/&thinsp;' + pageCount + '</span>'
       : '';
-    return '<div class="foot">Ramonage Marc Gomes Sud Vend&eacute;e &middot; 42 rue des Orch&icirc;d&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77' + number + '</div>';
+    return '<div class="foot">Ramonage Marc Gomes Sud Vend&eacute;e &middot; 42 rue des Orchid&eacute;es &middot; 85580 GRUES &middot; 06&nbsp;01&nbsp;04&nbsp;88&nbsp;77' + number + '</div>';
   }
 
   const pages = chimneys.map((chimney, index) => {
