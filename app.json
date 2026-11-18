@@ -14,7 +14,8 @@
       "policy": "appVersion"
     },
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "fr.ramonagemarcgomes.rapport"
     },
     "android": {
       "package": "fr.ramonagemarcgomes.rapport",
